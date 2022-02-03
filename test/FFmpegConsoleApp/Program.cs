@@ -18,13 +18,7 @@ namespace FFmpegConsoleApp
             List<Camera> cameras;
             List<Monitor> monitors;
 
-            FFmpegInit.useSpecificLogCallback();
             cameras = FFmpegCameraManager.GetCameraDevices();
-
-            FFmpegInit.useDefaultLogCallback();
-            cameras = FFmpegCameraManager.GetCameraDevices();
-
-
 
             monitors = FFmpegMonitorManager.GetMonitorDevices();
         }

@@ -7,7 +7,7 @@ using System.Drawing;
 
 using SIPSorceryMedia.FFmpeg.Interop.X11;
 using SIPSorceryMedia.FFmpeg.Interop.Win32;
-using static SIPSorceryMedia.FFmpeg.Interop.Win32.User32;
+using SIPSorceryMedia.FFmpeg.Interop.MacOS;
 
 namespace SIPSorceryMedia.FFmpeg
 {
@@ -15,7 +15,7 @@ namespace SIPSorceryMedia.FFmpeg
     {
         static public List<Monitor>? GetMonitorDevices()
         {
-            List<Monitor>? result = null ; 
+            List<Monitor>? result = null ;
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -27,7 +27,7 @@ namespace SIPSorceryMedia.FFmpeg
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                // TODO
+                result = AvFoundation.GetMonitors();
             }
             else
             {

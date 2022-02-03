@@ -8,6 +8,7 @@ namespace SIPSorceryMedia.FFmpeg
 {
     public unsafe class FFmpegCameraManager
     {
+
         static public List<Camera>? GetCameraDevices()
         {
             List<Camera>? result = null;
@@ -37,50 +38,39 @@ namespace SIPSorceryMedia.FFmpeg
                     }
                 }
             }
-            else
+            // We also need specific stuff to get Camera devices using avfoundation ...
+            else if (inputFormat == "avfoundation")
             {
+                result = SIPSorceryMedia.FFmpeg.Interop.MacOS.AvFoundation.GetCameraDevices();
+            }
+            else
+            { 
                 AVInputFormat* avInputFormat = ffmpeg.av_find_input_format(inputFormat);
                 AVDeviceInfoList* avDeviceInfoList = null;
 
-                int nb = ffmpeg.avdevice_list_input_sources(avInputFormat, null, null, &avDeviceInfoList);
-                if (nb >= 0)
-                {
-                    int nDevices = avDeviceInfoList->nb_devices;
-                    var avDevices = avDeviceInfoList->devices;
+                ffmpeg.avdevice_list_input_sources(avInputFormat, null, null, &avDeviceInfoList).ThrowExceptionIfError();
+                int nDevices = avDeviceInfoList->nb_devices;
+                var avDevices = avDeviceInfoList->devices;
 
-                    result = new List<Camera>();
-                    for (int i = 0; i < nDevices; i++)
+                result = new List<Camera>();
+                for (int i = 0; i < nDevices; i++)
+                {
+                    var avDevice = avDevices[i];
+                    var name = Marshal.PtrToStringAnsi((IntPtr)avDevice->device_description);
+                    var path = Marshal.PtrToStringAnsi((IntPtr)avDevice->device_name);
+
+                    if ((name != null) && (name.Length > 0))
                     {
-                        var avDevice = avDevices[i];
-                        var name = Marshal.PtrToStringAnsi((IntPtr)avDevice->device_description);
-                        var path = Marshal.PtrToStringAnsi((IntPtr)avDevice->device_name);
-
-                        if ((name != null) && (name.Length > 0))
+                        Camera camera = new Camera
                         {
-                            Camera camera = new Camera
-                            {
-                                Name = name,
-                                Path = path
-                            };
-                            result.Add(camera);
-                        }
+                            Name = name,
+                            Path = path
+                        };
+                        result.Add(camera);
                     }
-
-                    ffmpeg.avdevice_free_list_devices(&avDeviceInfoList);
                 }
-                else
-                {
-                    AVFormatContext* pFormatCtx = ffmpeg.avformat_alloc_context();
-                    AVDictionary* options = null;
-                    ffmpeg.av_dict_set(&options, "list_devices", "true", 0);
 
-                    ffmpeg.av_log(null, (int)FfmpegLogLevelEnum.AV_LOG_TRACE, $"START - list_devices ENUM\r\n");
-
-                    nb = ffmpeg.avformat_open_input(&pFormatCtx, null, avInputFormat, &options); // Here nb is < 0 ... But we have anyway an output from av_log which can be parsed ...
-                    ffmpeg.avformat_close_input(&pFormatCtx);
-
-                    ffmpeg.av_log(null, (int)FfmpegLogLevelEnum.AV_LOG_TRACE, $"END - list_devices ENUM\r\n");
-                }
+                ffmpeg.avdevice_free_list_devices(&avDeviceInfoList);
             }
             return result;
         }

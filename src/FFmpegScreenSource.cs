@@ -37,7 +37,7 @@ namespace SIPSorceryMedia.FFmpeg
                 inputFormat = "avfoundation";
                 options = new Dictionary<string, string>()
                 {
-                    ["vf"] = $"crop={rect.Width.ToString()}:{rect.Height.ToString()}:{rect.X.ToString()}:{rect.Y.ToString()}",
+                    //["vf"] = $"crop={rect.Width.ToString()}:{rect.Height.ToString()}:{rect.X.ToString()}:{rect.Y.ToString()}",
                     ["framerate"] = frameRate.ToString()
                 };
             }
