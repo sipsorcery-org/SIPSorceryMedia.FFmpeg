@@ -52,7 +52,7 @@ namespace SIPSorceryMedia.FFmpeg.Interop.Win32
 
                         Monitor monitor = new Monitor
                         {
-                            Name = $"{index++}",
+                            Name = $"Monitor {index++}",
                             Path = "desktop",
                             Rect = new Rectangle(mi.monitor.left, mi.monitor.top, mi.monitor.right - mi.monitor.left, mi.monitor.bottom - mi.monitor.top),
                             Primary = mi.flags == MONITORINFOF_PRIMARY,
