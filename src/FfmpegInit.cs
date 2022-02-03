@@ -20,10 +20,39 @@ namespace SIPSorceryMedia.FFmpeg
         AV_LOG_TRACE = 56,
     }
 
-    public static class FFmpegInit
+    public static unsafe class FFmpegInit
     {
         private static ILogger logger = NullLogger.Instance;
         private static bool registered = false;
+
+        private static av_log_set_callback_callback logCallback;
+
+
+        public static void useSpecificLogCallback()
+        {
+            logCallback = (p0, level, format, vl) =>
+            {
+                if (level > ffmpeg.av_log_get_level()) return;
+
+                var lineSize = 1024;
+                var lineBuffer = stackalloc byte[lineSize];
+                var printPrefix = 1;
+                ffmpeg.av_log_format_line(p0, level, format, vl, lineBuffer, lineSize, &printPrefix);
+                var line = Marshal.PtrToStringAnsi((IntPtr)lineBuffer);
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write(line);
+                Console.ResetColor();
+            };
+            ffmpeg.av_log_set_callback(logCallback);
+        }
+
+        public static void useDefaultLogCallback()
+        {
+            logCallback = (p0, level, format, vl) => ffmpeg.av_log_default_callback(p0, level, format, vl);
+
+            ffmpeg.av_log_set_callback(logCallback);
+        }
+
 
         public static void Initialise(FfmpegLogLevelEnum? logLevel = null, String? libPath = null, ILogger appLogger = null)
         {
