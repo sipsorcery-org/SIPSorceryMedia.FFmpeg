@@ -76,15 +76,16 @@ namespace SIPSorceryMedia.FFmpeg
                 throw new NotImplementedException($"Codec {codec} is not supported by the FFmpeg video decoder.");
             }
 
-            var decodedFrames = Decode(codecID, encodedSample, out int width, out int height);
+            //var decodedFrames = Decode(codecID, encodedSample, out int width, out int height);
 
-            if (decodedFrames != null && decodedFrames.Count > 0)
-            {
-                foreach (var decodedFrame in decodedFrames)
-                {
-                    yield return new VideoSample { Width = (uint)width, Height = (uint)height, Sample = decodedFrame };
-                }
-            }
+            //if (decodedFrames != null && decodedFrames.Count > 0)
+            //{
+            //    foreach (var decodedFrame in decodedFrames)
+            //    {
+            //        yield return new VideoSample { Width = (uint)width, Height = (uint)height, Sample = decodedFrame };
+            //    }
+            //}
+            throw new NotImplementedException($"TODO: IntPtr to Byte[]");
         }
 
         private AVCodecID GetAVCodecID(VideoCodecsEnum codec)
@@ -364,7 +365,7 @@ namespace SIPSorceryMedia.FFmpeg
             }
         }
 
-        public List<byte[]>? Decode(AVCodecID codecID, byte[] buffer, out int width, out int height)
+        public List<FFmpegImageRawSample>? Decode(AVCodecID codecID, byte[] buffer, out int width, out int height)
         {
             if (!_isDisposed)
             {
@@ -397,7 +398,7 @@ namespace SIPSorceryMedia.FFmpeg
             }
         }
 
-        private List<byte[]>? Decode(AVCodecID codecID, AVPacket* packet, out int width, out int height)
+        private List<FFmpegImageRawSample>? Decode(AVCodecID codecID, AVPacket* packet, out int width, out int height)
         {
             if (!_isDisposed)
             {
@@ -413,7 +414,7 @@ namespace SIPSorceryMedia.FFmpeg
 
                 try
                 {
-                    List<byte[]> rgbFrames = new List<byte[]>();
+                    List<FFmpegImageRawSample> rgbFrames = new List<FFmpegImageRawSample>();
 
                     ffmpeg.avcodec_send_packet(_decoderContext, packet).ThrowExceptionIfError();
 
@@ -435,7 +436,19 @@ namespace SIPSorceryMedia.FFmpeg
                                 AVPixelFormat.AV_PIX_FMT_BGR24);
                         }
 
-                        rgbFrames.Add(_i420ToRgb.ConvertFrame(ref *decodedFrame));
+                        var frameBGR24 = _i420ToRgb.Convert(ref *decodedFrame);
+                        //if (frameBGR24 != null)
+                        {
+                            FFmpegImageRawSample imageRawSample = new FFmpegImageRawSample
+                            {
+                                Width = width,
+                                Height = height,
+                                Stride = frameBGR24.linesize[0],
+                                Sample = (IntPtr)frameBGR24.data[0],
+                                PixelFormat = VideoPixelFormatsEnum.Rgb
+                            };
+                            rgbFrames.Add(imageRawSample);
+                        }
 
                         recvRes = ffmpeg.avcodec_receive_frame(_decoderContext, decodedFrame);
                     }

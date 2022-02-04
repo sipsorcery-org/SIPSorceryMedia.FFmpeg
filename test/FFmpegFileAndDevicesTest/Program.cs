@@ -76,8 +76,8 @@ namespace FFmpegFileAndDevicesTest
         static private VideoCodecsEnum VideoCodec = VideoCodecsEnum.H264; // or VideoCodecsEnum.VP8
         static private AudioCodecsEnum AudioCodec = AudioCodecsEnum.PCMU;
 
-        static private String VideoSourceFile = DISTANT_AUDIO_AND_VIDEO_FILE_WEBM; // Used if VideoSource = VIDEO_SOURCE.FILE_OR_STREAM
-        static private String AudioSourceFile = DISTANT_AUDIO_AND_VIDEO_FILE_WEBM; // used if AudioSource = AUDIO_SOURCE.FILE_OR_STREAM;
+        static private String VideoSourceFile = LOCAL_AUDIO_AND_VIDEO_FILE_MP4_BUNNY; // Used if VideoSource = VIDEO_SOURCE.FILE_OR_STREAM
+        static private String AudioSourceFile = LOCAL_AUDIO_AND_VIDEO_FILE_MP4_BUNNY; // used if AudioSource = AUDIO_SOURCE.FILE_OR_STREAM;
 
         static private string MicrophoneDevicePath = "audio=Microphone (HD Pro Webcam C920)"; // Specific info according end-user devices
         static private string CameraDevicePath = "video=HD Pro Webcam C920"; // Specific info according end-user devices
