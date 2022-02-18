@@ -23,7 +23,7 @@ namespace FFmpegConsoleApp
         static void Main(string[] args)
         {
             VideoCodecsEnum VideoCodec = VideoCodecsEnum.H264;
-            IFFmpegVideoSource videoSource;
+            IVideoSource videoSource;
 
             // Initialise FFmpeg librairies
             FFmpegInit.Initialise(FfmpegLogLevelEnum.AV_LOG_FATAL, LIB_PATH);
@@ -98,7 +98,7 @@ namespace FFmpegConsoleApp
 
                 var selectedCamera = cameras[cameraIndex];
                 SIPSorceryMedia.FFmpeg.FFmpegCameraSource cameraSource = new SIPSorceryMedia.FFmpeg.FFmpegCameraSource(selectedCamera.Path);
-                videoSource = cameraSource as IFFmpegVideoSource;
+                videoSource = cameraSource as IVideoSource;
 
             }
             // Do we manage a Monitor ?
@@ -131,13 +131,13 @@ namespace FFmpegConsoleApp
 
                 var selectedMonitor = monitors[monitorIndex];
                 SIPSorceryMedia.FFmpeg.FFmpegScreenSource screenSource = new SIPSorceryMedia.FFmpeg.FFmpegScreenSource(selectedMonitor.Path, selectedMonitor.Rect, 20);
-                videoSource = screenSource as IFFmpegVideoSource;
+                videoSource = screenSource as IVideoSource;
             }
 
 
             videoSource.RestrictFormats(x => x.Codec == VideoCodec);
             videoSource.SetVideoSourceFormat(videoSource.GetVideoSourceFormats().Find(x => x.Codec == VideoCodec));
-            videoSource.OnVideoSourceRawExtSample+= FileSource_OnVideoSourceRawExtSample;
+            videoSource.OnVideoSourceRawSample+= FileSource_OnVideoSourceRawSample;
             videoSource.StartVideo();
 
             for (var loop = true; loop;)
@@ -155,7 +155,7 @@ namespace FFmpegConsoleApp
             }
         }
 
-        private static void FileSource_OnVideoSourceRawExtSample(uint durationMilliseconds, FFmpegImageRawSample imageRawSample)
+        private static void FileSource_OnVideoSourceRawSample(uint durationMilliseconds, RawImage rawImage)
         {
             if (converter == null 
                 || Console.WindowWidth != converter.SourceWidth 
@@ -164,11 +164,11 @@ namespace FFmpegConsoleApp
                 // We can't just override converter
                 // We have to dispose the previous one and instanciate a new one with the new window size.
                 converter?.Dispose();
-                converter = new VideoFrameConverter(imageRawSample.Width, imageRawSample.Height, AVPixelFormat.AV_PIX_FMT_RGB24, Console.WindowWidth, Console.WindowHeight, FFmpeg.AutoGen.AVPixelFormat.AV_PIX_FMT_GRAY8);
+                converter = new VideoFrameConverter(rawImage.Width, rawImage.Height, AVPixelFormat.AV_PIX_FMT_RGB24, Console.WindowWidth, Console.WindowHeight, FFmpeg.AutoGen.AVPixelFormat.AV_PIX_FMT_GRAY8);
             }
 
             // Resize the frame to the size of the terminal window, then draw it in ASCII.
-            var frame = converter.Convert(imageRawSample.Sample);
+            var frame = converter.Convert(rawImage.Sample);
             DrawAsciiFrame(frame);
         }
 

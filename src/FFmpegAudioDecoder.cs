@@ -2,6 +2,7 @@
 
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
+using SIPSorceryMedia.Abstractions;
 using System;
 using System.Threading.Tasks;
 
@@ -80,7 +81,7 @@ namespace SIPSorceryMedia.FFmpeg
                 ffmpeg.av_opt_set_sample_fmt(_swrContext, "out_sample_fmt", AVSampleFormat.AV_SAMPLE_FMT_S16, 0);
 
                 ffmpeg.av_opt_set_int(_swrContext, "in_sample_rate", _audDecCtx->sample_rate, 0);
-                ffmpeg.av_opt_set_int(_swrContext, "out_sample_rate", Helper.AUDIO_SAMPLING_RATE, 0);
+                ffmpeg.av_opt_set_int(_swrContext, "out_sample_rate", AudioFormat.DEFAULT_CLOCK_RATE, 0);
 
                 //FIX:Some Codec's Context Information is missing
                 if (_audDecCtx->channel_layout == 0)
@@ -97,7 +98,7 @@ namespace SIPSorceryMedia.FFmpeg
 
                 _audioTimebase = ffmpeg.av_q2d(_fmtCtx->streams[_audioStreamIndex]->time_base);
                 _audioAvgFrameRate = ffmpeg.av_q2d(_fmtCtx->streams[_audioStreamIndex]->avg_frame_rate);
-                _maxAudioFrameSpace = (int)(_audioAvgFrameRate > 0 ? 1000 / _audioAvgFrameRate : 10000 * Helper.AUDIO_SAMPLING_RATE);
+                _maxAudioFrameSpace = (int)(_audioAvgFrameRate > 0 ? 1000 / _audioAvgFrameRate : 10000 * AudioFormat.DEFAULT_CLOCK_RATE);
             }
         }
 

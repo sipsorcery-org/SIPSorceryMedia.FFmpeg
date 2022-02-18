@@ -43,7 +43,7 @@ namespace SIPSorceryMedia.FFmpeg
             //ffmpeg.av_log_set_level(ffmpeg.AV_LOG_TRACE);
         }
 
-        public byte[] EncodeVideo(int width, int height, byte[] sample, VideoPixelFormatsEnum pixelFormat, VideoCodecsEnum codec)
+        public byte[] EncodeVideo(RawImage rawImage, VideoCodecsEnum codec)
         {
             AVCodecID codecID = GetAVCodecID(codec);
             if (codecID == AVCodecID.AV_CODEC_ID_NONE)
@@ -52,14 +52,15 @@ namespace SIPSorceryMedia.FFmpeg
             }
 
             //var i420 = PixelConverter.ToI420(width, height, sample, pixelFormat);
-            var avPixelFormat = GetAVPixelFormat(pixelFormat);
+            var avPixelFormat = GetAVPixelFormat(rawImage.PixelFormat);
             if (avPixelFormat == AVPixelFormat.AV_PIX_FMT_NONE)
             {
-                throw new NotImplementedException($"No matching FFmpeg pixel format was found for video pixel format {pixelFormat}.");
+                throw new NotImplementedException($"No matching FFmpeg pixel format was found for video pixel format {rawImage.PixelFormat}.");
             }
 
 #pragma warning disable CS8603
-            return Encode(codecID, sample, width, height, Helper.DEFAULT_VIDEO_FRAME_RATE, false, avPixelFormat);
+            byte[] sample = rawImage.GetBuffer();
+            return Encode(codecID, sample, rawImage.Width, rawImage.Height, Helper.DEFAULT_VIDEO_FRAME_RATE, false, avPixelFormat);
 #pragma warning restore
         }
 
@@ -68,7 +69,7 @@ namespace SIPSorceryMedia.FFmpeg
             _forceKeyFrame = true;
         }
 
-        public IEnumerable<VideoSample> DecodeVideo(byte[] encodedSample, VideoPixelFormatsEnum pixelFormat, VideoCodecsEnum codec)
+        public IEnumerable<RawImage> DecodeVideo(byte[] encodedSample, VideoPixelFormatsEnum pixelFormat, VideoCodecsEnum codec)
         {
             AVCodecID codecID = GetAVCodecID(codec);
             if (codecID == AVCodecID.AV_CODEC_ID_NONE)
@@ -76,15 +77,10 @@ namespace SIPSorceryMedia.FFmpeg
                 throw new NotImplementedException($"Codec {codec} is not supported by the FFmpeg video decoder.");
             }
 
-            //var decodedFrames = Decode(codecID, encodedSample, out int width, out int height);
+            var decodedFrames = Decode(codecID, encodedSample, out int width, out int height);
+            if (decodedFrames != null && decodedFrames.Count > 0)
+                return decodedFrames;
 
-            //if (decodedFrames != null && decodedFrames.Count > 0)
-            //{
-            //    foreach (var decodedFrame in decodedFrames)
-            //    {
-            //        yield return new VideoSample { Width = (uint)width, Height = (uint)height, Sample = decodedFrame };
-            //    }
-            //}
             throw new NotImplementedException($"TODO: IntPtr to Byte[]");
         }
 
@@ -365,7 +361,7 @@ namespace SIPSorceryMedia.FFmpeg
             }
         }
 
-        public List<FFmpegImageRawSample>? Decode(AVCodecID codecID, byte[] buffer, out int width, out int height)
+        public List<RawImage>? Decode(AVCodecID codecID, byte[] buffer, out int width, out int height)
         {
             if (!_isDisposed)
             {
@@ -398,7 +394,7 @@ namespace SIPSorceryMedia.FFmpeg
             }
         }
 
-        private List<FFmpegImageRawSample>? Decode(AVCodecID codecID, AVPacket* packet, out int width, out int height)
+        private List<RawImage>? Decode(AVCodecID codecID, AVPacket* packet, out int width, out int height)
         {
             if (!_isDisposed)
             {
@@ -414,7 +410,7 @@ namespace SIPSorceryMedia.FFmpeg
 
                 try
                 {
-                    List<FFmpegImageRawSample> rgbFrames = new List<FFmpegImageRawSample>();
+                    List<RawImage> rgbFrames = new List<RawImage>();
 
                     ffmpeg.avcodec_send_packet(_decoderContext, packet).ThrowExceptionIfError();
 
@@ -439,7 +435,7 @@ namespace SIPSorceryMedia.FFmpeg
                         var frameBGR24 = _i420ToRgb.Convert(ref *decodedFrame);
                         //if (frameBGR24 != null)
                         {
-                            FFmpegImageRawSample imageRawSample = new FFmpegImageRawSample
+                            RawImage imageRawSample = new RawImage
                             {
                                 Width = width,
                                 Height = height,

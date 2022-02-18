@@ -8,11 +8,11 @@ using SIPSorceryMedia.Abstractions;
 
 namespace SIPSorceryMedia.FFmpeg
 {
-    public class FFmpegVideoEndPoint : IFFmpegVideoSink, IDisposable
+    public class FFmpegVideoEndPoint : IVideoSink, IDisposable
     {
         public ILogger logger = SIPSorcery.LogFactory.CreateLogger<FFmpegVideoEndPoint>();
 
-        public static readonly List<VideoFormat> SupportedFormats = Helper.GetSupportedVideoFormats();
+        public static readonly List<VideoFormat> _supportedFormats = Helper.GetSupportedVideoFormats();
 
         private FFmpegVideoEncoder _ffmpegEncoder;
 
@@ -22,10 +22,9 @@ namespace SIPSorceryMedia.FFmpeg
         private bool _isClosed;
         private bool _forceKeyFrame;
 
-        public event VideoExtSinkSampleDecodedDelegate ? OnVideoExtSinkDecodedSample;
+        public event VideoSinkSampleDecodedDelegate? OnVideoSinkDecodedSample;
 
 #pragma warning disable CS0067
-        public event VideoSinkSampleDecodedDelegate ? OnVideoSinkDecodedSample;
         //public event EncodedSampleDelegate? OnVideoSourceEncodedSample;
         //public event RawExtVideoSampleDelegate? OnVideoSourceRawExtSample;
         //public event RawVideoSampleDelegate? OnVideoSourceRawSample;
@@ -34,7 +33,7 @@ namespace SIPSorceryMedia.FFmpeg
 
         public FFmpegVideoEndPoint()
         {
-            _videoFormatManager = new MediaFormatManager<VideoFormat>(SupportedFormats);
+            _videoFormatManager = new MediaFormatManager<VideoFormat>(_supportedFormats);
             _ffmpegEncoder = new FFmpegVideoEncoder();
         }
 
@@ -74,8 +73,7 @@ namespace SIPSorceryMedia.FFmpeg
                 {
                     foreach (var imageRawSample in imageRawSamples)
                     {
-                        OnVideoExtSinkDecodedSample?.Invoke(imageRawSample);
-                        //OnVideoSinkDecodedSample?.Invoke(rgbFrame, (uint)width, (uint)height, (int)(width * 3), VideoPixelFormatsEnum.Rgb);
+                        OnVideoSinkDecodedSample?.Invoke(imageRawSample);
                     }
                 }
             }

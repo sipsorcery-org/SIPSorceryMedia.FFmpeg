@@ -38,12 +38,8 @@ namespace SIPSorceryMedia.FFmpeg
         }
     }
 
-    public class Monitor
+    public class Monitor: FFmpegDevice
     {
-        public String Name { get; set; }
-
-        public String Path { get; set; }
-
         public Rectangle Rect { get; set; }
 
         public Boolean Primary { get; set; }

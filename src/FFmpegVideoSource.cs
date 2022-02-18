@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace SIPSorceryMedia.FFmpeg
 {
-    public class FFmpegVideoSource: IFFmpegVideoSource, IDisposable
+    public class FFmpegVideoSource: IVideoSource, IDisposable
     {
 
         private static ILogger logger = SIPSorcery.LogFactory.CreateLogger<FFmpegVideoSource>();
@@ -30,10 +30,10 @@ namespace SIPSorceryMedia.FFmpeg
         internal MediaFormatManager<VideoFormat> _videoFormatManager;
 
         public event EncodedSampleDelegate? OnVideoSourceEncodedSample;
-        public event RawExtVideoSampleDelegate? OnVideoSourceRawExtSample;
+
+        public event RawVideoSampleDelegate? OnVideoSourceRawSample;
 
 #pragma warning disable CS0067
-        public event RawVideoSampleDelegate? OnVideoSourceRawSample;
         public event SourceErrorDelegate? OnVideoSourceError;
 #pragma warning restore CS0067
         public event Action? OnEndOfFile;
@@ -90,22 +90,17 @@ namespace SIPSorceryMedia.FFmpeg
 
         private unsafe void VideoDecoder_OnVideoFrame(ref AVFrame frame)
         {
-            if ( (OnVideoSourceEncodedSample != null) || (OnVideoSourceRawExtSample != null) )
+            if ( (OnVideoSourceEncodedSample != null) || (OnVideoSourceRawSample != null) )
             {
                 int frameRate = (int)_videoDecoder.VideoAverageFrameRate;
                 frameRate = (frameRate <= 0) ? Helper.DEFAULT_VIDEO_FRAME_RATE : frameRate;
-                uint timestampDuration = (uint)(Helper.VIDEO_SAMPLING_RATE / frameRate);
+                uint timestampDuration = (uint)(VideoFormat.DEFAULT_CLOCK_RATE / frameRate);
 
                 var width = frame.width;
                 var height = frame.height;
 
-                var scaleFactor = 1;
-                var targetWidth = (int)Math.Ceiling((double)width / scaleFactor); 
-                var targetHeight = (int)Math.Ceiling((double)height / scaleFactor);
-                var targetFps = frameRate;
-
                 // Manage Raw Sample
-                if (OnVideoSourceRawExtSample != null)
+                if (OnVideoSourceRawSample != null)
                 {
                     if (_videoFrameBGR24Converter == null ||
                         _videoFrameBGR24Converter.SourceWidth != width ||
@@ -114,24 +109,21 @@ namespace SIPSorceryMedia.FFmpeg
                         _videoFrameBGR24Converter = new VideoFrameConverter(
                             width, height,
                             (AVPixelFormat)frame.format,
-                            targetWidth, targetHeight,
+                            width, height,
                             AVPixelFormat.AV_PIX_FMT_BGR24);
                         logger.LogDebug($"Frame format: [{frame.format}]");
                     }
 
                     var frameBGR24 = _videoFrameBGR24Converter.Convert(ref frame);
-                    //if (frameBGR24 != null)
+                    RawImage imageRawSample = new RawImage
                     {
-                        FFmpegImageRawSample imageRawSample = new FFmpegImageRawSample
-                        {
-                            Width = targetWidth,
-                            Height = targetHeight,
-                            Stride = frameBGR24.linesize[0],
-                            Sample = (IntPtr)frameBGR24.data[0],
-                            PixelFormat = VideoPixelFormatsEnum.Rgb
-                        };
-                        OnVideoSourceRawExtSample?.Invoke(timestampDuration, imageRawSample);
-                    }
+                        Width = width,
+                        Height = height,
+                        Stride = frameBGR24.linesize[0],
+                        Sample = (IntPtr)frameBGR24.data[0],
+                        PixelFormat = VideoPixelFormatsEnum.Rgb
+                    };
+                    OnVideoSourceRawSample?.Invoke(timestampDuration, imageRawSample);
                 }
 
                 // Manage Encoded Sample
@@ -144,24 +136,22 @@ namespace SIPSorceryMedia.FFmpeg
                         _videoFrameYUV420PConverter = new VideoFrameConverter(
                             width, height,
                             (AVPixelFormat)frame.format,
-                            targetWidth, targetHeight,
+                            width, height,
                             AVPixelFormat.AV_PIX_FMT_YUV420P);
                         logger.LogDebug($"Frame format: [{frame.format}]");
                     }
 
                     var frameYUV420P = _videoFrameYUV420PConverter.Convert(ref frame);
-                    //if (frameYUV420P != null)
-                    {
-                        AVCodecID aVCodecId = FFmpegConvert.GetAVCodecID(_videoFormatManager.SelectedFormat.Codec);
+                    AVCodecID aVCodecId = FFmpegConvert.GetAVCodecID(_videoFormatManager.SelectedFormat.Codec);
 
-                        byte[]? encodedSample = _videoEncoder.Encode(aVCodecId, frameYUV420P, targetFps);
-                        if (encodedSample != null)
-                        {
-                            // Note the event handler can be removed while the encoding is in progress.
-                            OnVideoSourceEncodedSample?.Invoke(timestampDuration, encodedSample);
-                        }
-                        _forceKeyFrame = false;
+                    byte[]? encodedSample = _videoEncoder.Encode(aVCodecId, frameYUV420P, frameRate);
+
+                    if (encodedSample != null)
+                    {
+                        // Note the event handler can be removed while the encoding is in progress.
+                        OnVideoSourceEncodedSample?.Invoke(timestampDuration, encodedSample);
                     }
+                    _forceKeyFrame = false;
                 }
             }
         }

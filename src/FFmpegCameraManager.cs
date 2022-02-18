@@ -76,10 +76,7 @@ namespace SIPSorceryMedia.FFmpeg
         }
     }
 
-    public class Camera
+    public class Camera : FFmpegDevice
     {
-        public String Name { get; set; }
-
-        public String Path { get; set; }
     }
 }
