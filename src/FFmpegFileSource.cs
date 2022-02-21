@@ -130,7 +130,7 @@ namespace SIPSorceryMedia.FFmpeg
 
         public void ForceKeyFrame() => _FFmpegVideoSource?.ForceKeyFrame();
         
-        public void ExternalVideoSourceRawSample(uint durationMilliseconds, int width, int height, byte[] sample, VideoPixelFormatsEnum pixelFormat) => throw new NotImplementedException();
+        public void ExternalVideoSourceRawSample(uint durationMilliseconds, RawImage rawImage) => throw new NotImplementedException();
 
         public bool HasEncodedVideoSubscribers()
         {

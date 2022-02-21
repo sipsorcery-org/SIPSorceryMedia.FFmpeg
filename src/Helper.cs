@@ -11,10 +11,13 @@ namespace SIPSorceryMedia.FFmpeg
         public const int MIN_SLEEP_MILLISECONDS = 15;
         public const int DEFAULT_VIDEO_FRAME_RATE = 30;
 
+        public const int VP8_FORMATID = 96;
+        public const int H264_FORMATID = 100;
+
         public static List<VideoFormat> GetSupportedVideoFormats() => new List<VideoFormat>
         {
-            new VideoFormat(VideoCodecsEnum.VP8,    96,     VideoFormat.DEFAULT_CLOCK_RATE),
-            new VideoFormat(VideoCodecsEnum.H264,   100,    VideoFormat.DEFAULT_CLOCK_RATE)
+            new VideoFormat(VideoCodecsEnum.VP8,    VP8_FORMATID,     VideoFormat.DEFAULT_CLOCK_RATE),
+            new VideoFormat(VideoCodecsEnum.H264,   H264_FORMATID,    VideoFormat.DEFAULT_CLOCK_RATE)
         };
 
         public static List<AudioFormat> GetSupportedAudioFormats() => new List<AudioFormat>
