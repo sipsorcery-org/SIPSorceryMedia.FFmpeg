@@ -80,7 +80,7 @@ namespace SIPSorceryMedia.FFmpeg
         }
 
         public void ForceKeyFrame() => _forceKeyFrame = true;
-        public void ExternalVideoSourceRawSample(uint durationMilliseconds, int width, int height, byte[] sample, VideoPixelFormatsEnum pixelFormat) => throw new NotImplementedException();
+        public void ExternalVideoSourceRawSample(uint durationMilliseconds, RawImage rawImage) => throw new NotImplementedException();
         public bool HasEncodedVideoSubscribers() => OnVideoSourceEncodedSample != null;
         public bool IsVideoSourcePaused() => _isPaused;
         public Task StartVideo() => Start();
