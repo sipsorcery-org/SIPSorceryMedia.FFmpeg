@@ -213,7 +213,7 @@ namespace SIPSorceryMedia.FFmpeg
                                         dpts -= firts_dpts;
                                     }
                                     int sleep = (int)(dpts * 1000 - DateTime.Now.Subtract(startTime).TotalMilliseconds);
-                                    Console.WriteLine($"sleep {sleep} {Math.Min(_maxAudioFrameSpace, sleep)} - firts_dpts:{firts_dpts} - dpts:{dpts} - original_dpts:{original_dpts}");
+                                    //Console.WriteLine($"sleep {sleep} {Math.Min(_maxAudioFrameSpace, sleep)} - firts_dpts:{firts_dpts} - dpts:{dpts} - original_dpts:{original_dpts}");
 
 
                                     if (sleep > Helper.MIN_SLEEP_MILLISECONDS)
