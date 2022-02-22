@@ -23,17 +23,17 @@ namespace SIPSorceryMedia.FFmpeg
         private bool _isClosed;
 
         public event EncodedSampleDelegate? OnAudioSourceEncodedSample;
+        public event RawAudioSampleDelegate? OnAudioSourceRawSample;
 
         public event EncodedSampleDelegate? OnVideoSourceEncodedSample;
         public event RawVideoSampleDelegate? OnVideoSourceRawSample;
-#pragma warning disable CS0067
-        public event RawAudioSampleDelegate? OnAudioSourceRawSample;
 
+        public event Action? OnEndOfFile;
+
+#pragma warning disable CS0067
         public event SourceErrorDelegate? OnAudioSourceError;
         public event SourceErrorDelegate? OnVideoSourceError;
 #pragma warning restore CS0067
-
-        public event Action? OnEndOfFile;
 
         public unsafe FFmpegFileSource(string path, bool repeat, IAudioEncoder audioEncoder, bool useVideo = true)
         {
@@ -50,6 +50,8 @@ namespace SIPSorceryMedia.FFmpeg
                 _FFmpegAudioSource.InitialiseDecoder();
 
                 _FFmpegAudioSource.OnAudioSourceEncodedSample += _FFmpegAudioSource_OnAudioSourceEncodedSample;
+                _FFmpegAudioSource.OnAudioSourceRawSample += _FFmpegAudioSource_OnAudioSourceRawSample;
+                _FFmpegAudioSource.OnEndOfFile += _FFmpegAudioSource_OnEndOfFile;
             }
 
             if (useVideo)
@@ -60,7 +62,18 @@ namespace SIPSorceryMedia.FFmpeg
 
                 _FFmpegVideoSource.OnVideoSourceEncodedSample += _FFmpegVideoSource_OnVideoSourceEncodedSample;
                 _FFmpegVideoSource.OnVideoSourceRawSample += _FFmpegVideoSource_OnVideoSourceRawSample;
+                _FFmpegVideoSource.OnEndOfFile += _FFmpegVideoSource_OnEndOfFile;
             }
+        }
+
+        private void _FFmpegVideoSource_OnEndOfFile()
+        {
+            OnEndOfFile?.Invoke();
+        }
+
+        private void _FFmpegAudioSource_OnEndOfFile()
+        {
+            OnEndOfFile?.Invoke();
         }
 
         private void _FFmpegVideoSource_OnVideoSourceEncodedSample(uint durationRtpUnits, byte[] sample)
@@ -76,6 +89,12 @@ namespace SIPSorceryMedia.FFmpeg
         private void _FFmpegAudioSource_OnAudioSourceEncodedSample(uint durationRtpUnits, byte[] sample)
         {
             OnAudioSourceEncodedSample?.Invoke(durationRtpUnits, sample);
+        }
+
+        private void _FFmpegAudioSource_OnAudioSourceRawSample(AudioSamplingRatesEnum samplingRate, uint durationMilliseconds, short[] sample)
+        {
+            OnAudioSourceRawSample?.Invoke(samplingRate, durationMilliseconds, sample);
+
         }
 
         public bool IsPaused() => _isPaused;
@@ -94,13 +113,43 @@ namespace SIPSorceryMedia.FFmpeg
                 _FFmpegAudioSource.SetAudioSourceFormat(audioFormat);
             }
         }
+        
         public void RestrictFormats(Func<AudioFormat, bool> filter)
         {
             if (_FFmpegAudioSource != null)
                 _FFmpegAudioSource.RestrictFormats(filter);
         }
+        
         public void ExternalAudioSourceRawSample(AudioSamplingRatesEnum samplingRate, uint durationMilliseconds, short[] sample) => throw new NotImplementedException();
-        public bool HasEncodedAudioSubscribers() => OnAudioSourceEncodedSample != null;
+        
+        public bool HasEncodedAudioSubscribers()
+        {
+            Boolean result = OnAudioSourceEncodedSample != null;
+            if (_FFmpegAudioSource != null)
+            {
+                if (result)
+                    _FFmpegAudioSource.OnAudioSourceEncodedSample += _FFmpegAudioSource_OnAudioSourceEncodedSample;
+                else
+                    _FFmpegAudioSource.OnAudioSourceEncodedSample -= _FFmpegAudioSource_OnAudioSourceEncodedSample;
+            }
+
+            return result;
+        }
+
+        public bool HasRawAudioSubscribers()
+        {
+            Boolean result = OnAudioSourceRawSample!= null;
+            if (_FFmpegAudioSource != null)
+            {
+                if (result)
+                    _FFmpegAudioSource.OnAudioSourceRawSample += _FFmpegAudioSource_OnAudioSourceRawSample;
+                else
+                    _FFmpegAudioSource.OnAudioSourceRawSample -= _FFmpegAudioSource_OnAudioSourceRawSample;
+            }
+
+            return result;
+        }
+
         public bool IsAudioSourcePaused() => _isPaused;
         public Task StartAudio() => Start();
         public Task PauseAudio() => Pause();
@@ -122,6 +171,7 @@ namespace SIPSorceryMedia.FFmpeg
                 _FFmpegVideoSource.SetVideoSourceFormat(videoFormat);
             }
         }
+       
         public void RestrictFormats(Func<VideoFormat, bool> filter)
         {
             if (_FFmpegVideoSource != null)

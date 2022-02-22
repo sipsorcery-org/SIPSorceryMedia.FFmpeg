@@ -22,7 +22,7 @@ namespace SIPSorceryMedia.FFmpeg
 
         internal int _currentNbSamples = 0;
         internal int bufferSize;
-        internal byte[] buffer; // Avoid oto create buffer of same size
+        internal byte[] buffer; // Avoid to create buffer of same size
 
         internal FFmpegAudioDecoder _audioDecoder;
         internal IAudioEncoder _audioEncoder;
@@ -30,11 +30,13 @@ namespace SIPSorceryMedia.FFmpeg
         internal MediaFormatManager<AudioFormat> _audioFormatManager;
 
         public event EncodedSampleDelegate? OnAudioSourceEncodedSample;
-#pragma warning disable CS0067
         public event RawAudioSampleDelegate? OnAudioSourceRawSample;
+
+        public event Action? OnEndOfFile;
+
+#pragma warning disable CS0067
         public event SourceErrorDelegate? OnAudioSourceError;
 #pragma warning restore CS0067
-        public event Action? OnEndOfFile;
 
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public FFmpegAudioSource(IAudioEncoder audioEncoder)
@@ -66,11 +68,11 @@ namespace SIPSorceryMedia.FFmpeg
             _audioDecoder?.InitialiseSource();
         }
 
-
         private void Initialise()
         {
             _audioDecoder.InitialiseSource();
         }
+
         public bool IsPaused() => _isPaused;
 
         public List<AudioFormat> GetAudioSourceFormats()
@@ -118,18 +120,20 @@ namespace SIPSorceryMedia.FFmpeg
             fixed (byte* pBuffer = buffer)
                 dstSampleCount = ffmpeg.swr_convert(_audioDecoder._swrContext, &pBuffer, bufferSize, avFrame.extended_data, avFrame.nb_samples).ThrowExceptionIfError();
 
-            Console.WriteLine($"nb_samples:{avFrame.nb_samples} - bufferSize:{bufferSize} - dstSampleCount:{dstSampleCount}");
+            //Console.WriteLine($"nb_samples:{avFrame.nb_samples} - bufferSize:{bufferSize} - dstSampleCount:{dstSampleCount}");
 
             if(dstSampleCount > 0)
             {
                 // FFmpeg AV_SAMPLE_FMT_S16 will store the bytes in the correct endianess for the underlying platform.
                 short[] pcm = buffer.Take(dstSampleCount * 2).Where((x, i) => i % 2 == 0).Select((y, i) => BitConverter.ToInt16(buffer, i * 2)).ToArray();
+
+                OnAudioSourceRawSample?.Invoke(AudioSamplingRatesEnum.Rate8KHz, (uint)pcm.Length, pcm);
+
                 var encodedSample = _audioEncoder.EncodeAudio(pcm, _audioFormatManager.SelectedFormat);
 
                 OnAudioSourceEncodedSample?.Invoke((uint)encodedSample.Length, encodedSample);
             }
         }
-
 
         public Task Start()
         {
