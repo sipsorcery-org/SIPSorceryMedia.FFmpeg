@@ -51,7 +51,7 @@ Several projects permits to understand how the library can be used (all in C# ex
 - [FFmpegConsoleApp](./test/FFmpegConsoleApp) - **Multiplatform application**:
     - Enumerates Camera
     - Enumerates Monitors
-    - Let user select one Camera or one Monitor
+    - Let user select a Camera, a Monitor or a File 
     - Display in ASCII the selection in a Terminal Window
     
 - [FFmpegFileAndDevicesTest](./test/FFmpegFileAndDevicesTest) - **Multiplatform application**:
