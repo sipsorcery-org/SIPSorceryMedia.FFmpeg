@@ -122,16 +122,18 @@ namespace SIPSorceryMedia.FFmpeg
 
             //Console.WriteLine($"nb_samples:{avFrame.nb_samples} - bufferSize:{bufferSize} - dstSampleCount:{dstSampleCount}");
 
-            if(dstSampleCount > 0)
+            if( (dstSampleCount > 0) && ((OnAudioSourceRawSample != null) || (OnAudioSourceEncodedSample != null) ) ) 
             {
                 // FFmpeg AV_SAMPLE_FMT_S16 will store the bytes in the correct endianess for the underlying platform.
                 short[] pcm = buffer.Take(dstSampleCount * 2).Where((x, i) => i % 2 == 0).Select((y, i) => BitConverter.ToInt16(buffer, i * 2)).ToArray();
 
                 OnAudioSourceRawSample?.Invoke(AudioSamplingRatesEnum.Rate8KHz, (uint)pcm.Length, pcm);
 
-                var encodedSample = _audioEncoder.EncodeAudio(pcm, _audioFormatManager.SelectedFormat);
-
-                OnAudioSourceEncodedSample?.Invoke((uint)encodedSample.Length, encodedSample);
+                if (OnAudioSourceEncodedSample != null)
+                {
+                    var encodedSample = _audioEncoder.EncodeAudio(pcm, _audioFormatManager.SelectedFormat);
+                    OnAudioSourceEncodedSample?.Invoke((uint)encodedSample.Length, encodedSample);
+                }
             }
         }
 
