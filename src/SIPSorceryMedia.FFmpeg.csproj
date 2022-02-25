@@ -5,9 +5,11 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <Version>1.1.0.2</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
