@@ -23,8 +23,7 @@ namespace SIPSorceryMedia.FFmpeg
         public static List<AudioFormat> GetSupportedAudioFormats() => new List<AudioFormat>
         {
             new AudioFormat(SDPWellKnownMediaFormatsEnum.PCMU),
-            new AudioFormat(SDPWellKnownMediaFormatsEnum.PCMA),
-            new AudioFormat(SDPWellKnownMediaFormatsEnum.G722)
+            new AudioFormat(SDPWellKnownMediaFormatsEnum.PCMA)
         };
 
     }
