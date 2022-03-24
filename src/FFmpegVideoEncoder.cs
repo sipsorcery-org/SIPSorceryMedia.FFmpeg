@@ -432,15 +432,15 @@ namespace SIPSorceryMedia.FFmpeg
                                 AVPixelFormat.AV_PIX_FMT_BGR24);
                         }
 
-                        var frameBGR24 = _i420ToRgb.Convert(ref *decodedFrame);
-                        //if (frameBGR24 != null)
+                        var frameI420 = _i420ToRgb.Convert(*decodedFrame);
+                        if ((frameI420.width != 0) && (frameI420.height != 0))
                         {
                             RawImage imageRawSample = new RawImage
                             {
                                 Width = width,
                                 Height = height,
-                                Stride = frameBGR24.linesize[0],
-                                Sample = (IntPtr)frameBGR24.data[0],
+                                Stride = frameI420.linesize[0],
+                                Sample = (IntPtr)frameI420.data[0],
                                 PixelFormat = VideoPixelFormatsEnum.Rgb
                             };
                             rgbFrames.Add(imageRawSample);
@@ -453,7 +453,6 @@ namespace SIPSorceryMedia.FFmpeg
                     {
                         recvRes.ThrowExceptionIfError();
                     }
-
                     return rgbFrames;
                 }
                 finally

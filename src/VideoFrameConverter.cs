@@ -153,25 +153,53 @@ namespace SIPSorceryMedia.FFmpeg
             return outputBuffer;
         }
 
-        public AVFrame Convert(ref AVFrame frame)
+        public AVFrame Convert(AVFrame frame)
         {
-            ffmpeg.sws_scale(_pConvertContext,
-                frame.data, frame.linesize, 0, frame.height,
-                _dstData, _dstLinesize);
 
-            var data = new byte_ptrArray8();
-            data.UpdateFrom(_dstData);
-            var linesize = new int_array8();
-            linesize.UpdateFrom(_dstLinesize);
-
-            return new AVFrame
+            try
             {
-                data = data,
-                linesize = linesize,
-                width = _dstWidth,
-                height = _dstHeight,
-                format = (int)_dstPixelFormat
-            };
+                int result = ffmpeg.av_frame_copy_props(&frame, _dstFrame);
+
+
+                if (result >= 0)
+                    result = ffmpeg.sws_scale(_pConvertContext,
+                                frame.data, frame.linesize, 0, frame.height,
+                                _dstData, _dstLinesize);
+
+
+
+                if (result < 0)
+                {
+                    return new AVFrame
+                    {
+                        width = 0,
+                        height = 0
+                    };
+                }
+
+                var data = new byte_ptrArray8();
+                data.UpdateFrom(_dstData);
+                var linesize = new int_array8();
+                linesize.UpdateFrom(_dstLinesize);
+
+                return new AVFrame
+                {
+                    data = data,
+                    linesize = linesize,
+                    width = _dstWidth,
+                    height = _dstHeight,
+                    format = (int)_dstPixelFormat
+                };
+
+            }
+            catch
+            {
+                return new AVFrame
+                {
+                    width = 0,
+                    height = 0
+                };
+            }
 
             //ffmpeg.sws_scale(_pConvertContext,
             //    frame.data, frame.linesize, 0, frame.height,

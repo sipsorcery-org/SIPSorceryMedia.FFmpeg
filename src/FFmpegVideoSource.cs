@@ -114,16 +114,19 @@ namespace SIPSorceryMedia.FFmpeg
                         logger.LogDebug($"Frame format: [{frame.format}]");
                     }
 
-                    var frameBGR24 = _videoFrameBGR24Converter.Convert(ref frame);
-                    RawImage imageRawSample = new RawImage
+                    var frameBGR24 = _videoFrameBGR24Converter.Convert(frame);
+                    if ((frameBGR24.width != 0) && (frameBGR24.height != 0))
                     {
-                        Width = width,
-                        Height = height,
-                        Stride = frameBGR24.linesize[0],
-                        Sample = (IntPtr)frameBGR24.data[0],
-                        PixelFormat = VideoPixelFormatsEnum.Rgb
-                    };
-                    OnVideoSourceRawSample?.Invoke(timestampDuration, imageRawSample);
+                        RawImage imageRawSample = new RawImage
+                        {
+                            Width = width,
+                            Height = height,
+                            Stride = frameBGR24.linesize[0],
+                            Sample = (IntPtr)frameBGR24.data[0],
+                            PixelFormat = VideoPixelFormatsEnum.Rgb
+                        };
+                        OnVideoSourceRawSample?.Invoke(timestampDuration, imageRawSample);
+                    }
                 }
 
                 // Manage Encoded Sample
@@ -141,17 +144,22 @@ namespace SIPSorceryMedia.FFmpeg
                         logger.LogDebug($"Frame format: [{frame.format}]");
                     }
 
-                    var frameYUV420P = _videoFrameYUV420PConverter.Convert(ref frame);
-                    AVCodecID aVCodecId = FFmpegConvert.GetAVCodecID(_videoFormatManager.SelectedFormat.Codec);
-
-                    byte[]? encodedSample = _videoEncoder.Encode(aVCodecId, frameYUV420P, frameRate);
-
-                    if (encodedSample != null)
+                    var frameYUV420P = _videoFrameYUV420PConverter.Convert(frame);
+                    if ((frameYUV420P.width != 0) && (frameYUV420P.height != 0))
                     {
-                        // Note the event handler can be removed while the encoding is in progress.
-                        OnVideoSourceEncodedSample?.Invoke(timestampDuration, encodedSample);
+                        AVCodecID aVCodecId = FFmpegConvert.GetAVCodecID(_videoFormatManager.SelectedFormat.Codec);
+
+                        byte[]? encodedSample = _videoEncoder.Encode(aVCodecId, frameYUV420P, frameRate);
+
+                        if (encodedSample != null)
+                        {
+                            // Note the event handler can be removed while the encoding is in progress.
+                            OnVideoSourceEncodedSample?.Invoke(timestampDuration, encodedSample);
+                        }
+                        _forceKeyFrame = false;
                     }
-                    _forceKeyFrame = false;
+                    else
+                        _forceKeyFrame = true;
                 }
             }
         }
