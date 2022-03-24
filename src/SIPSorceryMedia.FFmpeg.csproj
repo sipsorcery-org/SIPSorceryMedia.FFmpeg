@@ -10,6 +10,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageLicenseExpression>LGPL-2.1</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
