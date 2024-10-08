@@ -2,7 +2,7 @@
 
 using System;
 using System.Threading;
-using FFmpeg.AutoGen;
+using FFmpeg.AutoGen.Abstractions;
 
 namespace FFmpegMp4Test
 {

@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using FFmpeg.AutoGen;
+using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
 using SIPSorceryMedia.Abstractions;
 
