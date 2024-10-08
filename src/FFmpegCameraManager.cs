@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 using DirectShowLib;
+using System.Linq;
+using SIPSorceryMedia.FFmpeg.Interop.Android;
 
 namespace SIPSorceryMedia.FFmpeg
 {
@@ -70,7 +72,7 @@ namespace SIPSorceryMedia.FFmpeg
             return result;
         }
 
-        static public Camera? GetCameraByPath(string path) => GetCameraDevices()?.FirstOrDefault(x => x.Path == path);
+        static public Camera? GetCameraByPath(string path) => GetCameraDevices().FirstOrDefault();
     }
 
     public class Camera

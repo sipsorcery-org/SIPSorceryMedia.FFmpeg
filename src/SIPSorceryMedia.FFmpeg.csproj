@@ -22,7 +22,9 @@
 	  <None Include="icon.png" Pack="true" PackagePath="" />
   </ItemGroup>
 	<PropertyGroup>
-		<TargetFrameworks>netstandard2.0;netstandard2.1;netcoreapp3.1;net5.0;net6.0;net6.0-android;net7.0;net7.0-android;net8.0;net8.0-android</TargetFrameworks>
+		<!--<TargetFrameworks>netstandard2.0;netstandard2.1;netcoreapp3.1;net5.0;net6.0;net6.0-android;net7.0;net7.0-android;net8.0;net8.0-android</TargetFrameworks>-->
+		<TargetFrameworks>net8.0-android;net8.0-maccatalyst;net8.0-ios</TargetFrameworks>
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net8.0-windows10.0.19041.0</TargetFrameworks>
 		<Authors>Aaron Clauson, Christophe Irles, Rafael Soares and Contributors</Authors>
 		<Copyright>opyright © 2020-2024 Aaron Clauson, Christophe Irles, Rafael Soares and Contributors.</Copyright>
 		<PackageLicenseExpression>LGPL-2.1-only</PackageLicenseExpression>

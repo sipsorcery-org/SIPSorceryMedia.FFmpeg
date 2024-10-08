@@ -19,10 +19,10 @@ namespace SIPSorceryMedia.FFmpeg
         private readonly Camera _camera;
 
         /// <summary>
-        /// Construct an FFmpeg camera/input device source provided input path.
+        /// Construct an FFmpeg camera/input device source provided input camera.Path.
         /// </summary>
         /// <remarks>See </remarks>
-        /// <param name="path"></param>
+        /// <param name="camera.Path"></param>
         public FFmpegCameraSource(string path) : this(FFmpegCameraManager.GetCameraByPath(path) ?? new() { Path = path })
         {
         }
@@ -48,9 +48,9 @@ namespace SIPSorceryMedia.FFmpeg
             AVInputFormat* aVInputFormat = ffmpeg.av_find_input_format(inputFormat);
             var decoderOptions = new Dictionary<string, string>();
 #if ANDROID
-            decoderOptions["camera_index"] = path;
+            decoderOptions["camera_index"] = camera.Path;
 #endif
-            CreateVideoDecoder(path, aVInputFormat, false, true);
+            CreateVideoDecoder(camera.Path, aVInputFormat, false, true);
             InitialiseDecoder(decoderOptions);
         }
 

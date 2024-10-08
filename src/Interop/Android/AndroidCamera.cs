@@ -1,5 +1,5 @@
 ﻿#if ANDROID
-using Android.Hardware.Camera2;
+using global::Android.Hardware.Camera2;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
