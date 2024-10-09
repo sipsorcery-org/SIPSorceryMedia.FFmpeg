@@ -1,4 +1,4 @@
-﻿using FFmpeg.AutoGen;
+﻿using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
 using SIPSorceryMedia.Abstractions;
 using System;

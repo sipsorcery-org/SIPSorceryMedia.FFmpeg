@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using FFmpeg.AutoGen;
+using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
 using SIPSorceryMedia.Abstractions;
 
@@ -185,7 +185,7 @@ namespace SIPSorceryMedia.FFmpeg
                 }
                 else if ((_codecID == AVCodecID.AV_CODEC_ID_VP8) || (_codecID == AVCodecID.AV_CODEC_ID_VP9))
                 {
-                    ffmpeg.av_opt_set(_encoderContext->priv_data, "quality", "realtime", 0).ThrowExceptionIfError();
+                    //ffmpeg.av_opt_set(_encoderContext->priv_data, "quality", "realtime", 0).ThrowExceptionIfError();
                 }
 
                 foreach (var option in _encoderOptions)
@@ -278,8 +278,8 @@ namespace SIPSorceryMedia.FFmpeg
             };
 
 
-            var data = new byte_ptrArray4();
-            var linesize = new int_array4();
+            var data = new byte_ptr4();
+            var linesize = new int4();
 
             ffmpeg.av_image_fill_arrays(ref data, ref linesize, sample, AVPixelFormat.AV_PIX_FMT_YUV420P, width, height, 1).ThrowExceptionIfError();
 

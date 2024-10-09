@@ -9,7 +9,7 @@ using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Threading;
-using FFmpeg.AutoGen;
+using FFmpeg.AutoGen.Abstractions;
 using SIPSorcery.Net;
 using SIPSorceryMedia.Abstractions;
 using SIPSorceryMedia.FFmpeg;
