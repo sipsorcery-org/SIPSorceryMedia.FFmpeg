@@ -48,7 +48,6 @@ Add FFmpeg lib at the project root to the folder you created
 then add the following to your project file:
 
 ```
-
 	<ItemGroup>
 		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libavcodec.so" />
 		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libavdevice.so" />
