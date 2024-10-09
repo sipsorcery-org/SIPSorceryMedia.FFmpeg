@@ -46,7 +46,9 @@ Install [homebrew](https://brew.sh/)
 Create a new folder in your project directory and call it libs
 Add FFmpeg lib at the project root to the folder you created
 then add the following to your project file:
-	```
+
+```
+
 	<ItemGroup>
 		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libavcodec.so" />
 		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libavdevice.so" />
@@ -81,7 +83,7 @@ then add the following to your project file:
 		<AndroidNativeLibrary Include="libs\android\x86_64\libswresample.so" />
 		<AndroidNativeLibrary Include="libs\android\x86_64\libswscale.so" />
 	</ItemGroup>
-	```
+```
 # Testing
 
 Test 
