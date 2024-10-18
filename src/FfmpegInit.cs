@@ -63,7 +63,6 @@ namespace SIPSorceryMedia.FFmpeg
                 ffmpeg.av_log_format_line(p0, level, format, vl, lineBuffer, lineSize, &printPrefix);
                 var line = Marshal.PtrToStringAnsi((IntPtr)lineBuffer);
                 //Console.Write(line);
-                Debug.WriteLine("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"+line+"\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
                 if (storeLogs)
                     storedLogs += line;
             };
