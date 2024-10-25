@@ -42,7 +42,60 @@ Install [homebrew](https://brew.sh/)
 
 `brew install ffmpeg`
 `brew install mono-libgdiplus`
+## For Android
+Create a new folder in your project directory and call it libs
+Add FFmpeg lib at the project root to the folder you created
+then add the following to your project file:
 
+```
+	<ItemGroup>
+		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libavcodec.so" />
+		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libavdevice.so" />
+		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libavfilter.so" />
+		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libavformat.so" />
+		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libavutil.so" />
+		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libpostproc.so" />
+		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libswresample.so" />
+		<AndroidNativeLibrary Include="libs\android\arm64-v8a\libswscale.so" />
+		<AndroidNativeLibrary Include="libs\android\armeabi-v7a\libavcodec.so" />
+		<AndroidNativeLibrary Include="libs\android\armeabi-v7a\libavdevice.so" />
+		<AndroidNativeLibrary Include="libs\android\armeabi-v7a\libavfilter.so" />
+		<AndroidNativeLibrary Include="libs\android\armeabi-v7a\libavformat.so" />
+		<AndroidNativeLibrary Include="libs\android\armeabi-v7a\libavutil.so" />
+		<AndroidNativeLibrary Include="libs\android\armeabi-v7a\libpostproc.so" />
+		<AndroidNativeLibrary Include="libs\android\armeabi-v7a\libswresample.so" />
+		<AndroidNativeLibrary Include="libs\android\armeabi-v7a\libswscale.so" />
+		<AndroidNativeLibrary Include="libs\android\x86\libavcodec.so" />
+		<AndroidNativeLibrary Include="libs\android\x86\libavdevice.so" />
+		<AndroidNativeLibrary Include="libs\android\x86\libavfilter.so" />
+		<AndroidNativeLibrary Include="libs\android\x86\libavformat.so" />
+		<AndroidNativeLibrary Include="libs\android\x86\libavutil.so" />
+		<AndroidNativeLibrary Include="libs\android\x86\libpostproc.so" />
+		<AndroidNativeLibrary Include="libs\android\x86\libswresample.so" />
+		<AndroidNativeLibrary Include="libs\android\x86\libswscale.so" />
+		<AndroidNativeLibrary Include="libs\android\x86_64\libavcodec.so" />
+		<AndroidNativeLibrary Include="libs\android\x86_64\libavdevice.so" />
+		<AndroidNativeLibrary Include="libs\android\x86_64\libavfilter.so" />
+		<AndroidNativeLibrary Include="libs\android\x86_64\libavformat.so" />
+		<AndroidNativeLibrary Include="libs\android\x86_64\libavutil.so" />
+		<AndroidNativeLibrary Include="libs\android\x86_64\libpostproc.so" />
+		<AndroidNativeLibrary Include="libs\android\x86_64\libswresample.so" />
+		<AndroidNativeLibrary Include="libs\android\x86_64\libswscale.so" />
+	</ItemGroup>
+```
+Now you have to get the required permissions for android.
+For the camera you have to add the following line to the AndroidManifest.xml
+```
+<uses-permission android:name="android.permission.CAMERA" />
+```
+And now you can request the Camera permission, for maui use the following:
+```
+if((await Permissions.RequestAsync<Permissions.Camera>()) is PermissionStatus.Granted)
+{
+    //Create your CameraSource here
+}
+```
+This method for requesting permissions works on all platforms but we only need it for android
 # Testing
 
 Test 

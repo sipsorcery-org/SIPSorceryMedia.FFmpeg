@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using FFmpeg.AutoGen;
+using FFmpeg.AutoGen.Abstractions;
+using FFmpeg.AutoGen.Bindings.DynamicallyLoaded;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SIPSorceryMedia.Abstractions;
@@ -93,7 +95,13 @@ namespace SIPSorceryMedia.FFmpeg
 
         internal static void SetFFmpegBinariesPath(string path)
         {
-            ffmpeg.RootPath = path;
+#if ANDROID
+                DynamicallyLoadedBindings.FunctionResolver = new FFmpeg.Interop.Android.AndroidFunctionResolver();
+#endif
+
+            DynamicallyLoadedBindings.LibrariesPath = path;
+            DynamicallyLoadedBindings.Initialize();
+
             registered = true;
 
             ffmpeg.avdevice_register_all();
@@ -103,7 +111,11 @@ namespace SIPSorceryMedia.FFmpeg
         {
             if (registered)
                 return;
-
+#if ANDROID
+                SetFFmpegBinariesPath("");
+                return;
+            
+#endif
             if (libPath == null)
             {
                 // search the system path, handle with and without .exe extension

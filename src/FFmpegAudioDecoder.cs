@@ -1,6 +1,6 @@
 ﻿// Audio resampling: https://ffmpeg.org/doxygen/2.5/resampling_audio_8c-example.html#_a21
 
-using FFmpeg.AutoGen;
+using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
 using SIPSorceryMedia.Abstractions;
 using System;
