@@ -83,6 +83,19 @@ then add the following to your project file:
 		<AndroidNativeLibrary Include="libs\android\x86_64\libswscale.so" />
 	</ItemGroup>
 ```
+Now you have to get the required permissions for android.
+For the camera you have to add the following line to the AndroidManifest.xml
+```
+<uses-permission android:name="android.permission.CAMERA" />
+```
+And now you can request the Camera permission, for maui use the following:
+```
+if((await Permissions.RequestAsync<Permissions.Camera>()) is PermissionStatus.Granted)
+{
+    //Create your CameraSource here
+}
+```
+This method for requesting permissions works on all platforms but we only need it for android
 # Testing
 
 Test 
