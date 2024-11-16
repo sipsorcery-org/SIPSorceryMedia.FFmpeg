@@ -1,10 +1,11 @@
-﻿using FFmpeg.AutoGen;
+﻿using FFmpeg.AutoGen.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 using DirectShowLib;
 using System.Linq;
+using SIPSorceryMedia.FFmpeg.Interop.Android;
 
 namespace SIPSorceryMedia.FFmpeg
 {
@@ -17,8 +18,14 @@ namespace SIPSorceryMedia.FFmpeg
             string inputFormat = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "dshow"
                                     : RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? "v4l2"
                                     : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "avfoundation"
+#if NET5_0_OR_GREATER
+                                    : OperatingSystem.IsAndroid() ? "android_camera"
+                                    : OperatingSystem.IsIOS() ? "avfoundation"
+#endif
                                     : throw new NotSupportedException($"Cannot find adequate input format - OSArchitecture:[{RuntimeInformation.OSArchitecture}] - OSDescription:[{RuntimeInformation.OSDescription}]");
 
+
+            // FFmpeg doesn't implement avdevice_list_input_sources() for the DShow input format yet.
             if (inputFormat == "dshow")
             {
                 result = SIPSorceryMedia.FFmpeg.Interop.Win32.DShow.GetCameraDevices();
@@ -27,7 +34,7 @@ namespace SIPSorceryMedia.FFmpeg
             {
                 result = SIPSorceryMedia.FFmpeg.Interop.MacOS.AvFoundation.GetCameraDevices();
             }
-            else
+            else if(inputFormat == "alsa")
             {
                 AVInputFormat* avInputFormat = ffmpeg.av_find_input_format(inputFormat);
                 AVDeviceInfoList* avDeviceInfoList = null;
@@ -56,10 +63,16 @@ namespace SIPSorceryMedia.FFmpeg
 
                 ffmpeg.avdevice_free_list_devices(&avDeviceInfoList);
             }
+            else if(inputFormat == "android_camera")
+            {
+#if ANDROID
+                result = AndroidCamera.GetCameras();
+#endif
+            }
             return result;
         }
 
-        static public Camera? GetCameraByPath(string path) => GetCameraDevices()?.FirstOrDefault(x => x.Path == path);
+        static public Camera? GetCameraByPath(string path) => GetCameraDevices().FirstOrDefault();
     }
 
     public class Camera

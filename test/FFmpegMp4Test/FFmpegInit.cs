@@ -2,7 +2,8 @@
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using FFmpeg.AutoGen;
+using FFmpeg.AutoGen.Abstractions;
+using FFmpeg.AutoGen.Bindings.DynamicallyLoaded;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -93,7 +94,9 @@ namespace FFmpegMp4Test
 
         internal static void SetFFmpegBinariesPath(string path)
         {
-            ffmpeg.RootPath = path;
+            DynamicallyLoadedBindings.LibrariesPath = path;
+            DynamicallyLoadedBindings.Initialize();
+
             registered = true;
 
             ffmpeg.avdevice_register_all();
@@ -103,7 +106,13 @@ namespace FFmpegMp4Test
         {
             if (registered)
                 return;
-
+#if NET5_0_OR_GREATER
+            if (OperatingSystem.IsAndroid())
+            {
+                SetFFmpegBinariesPath("");
+                return;
+            }
+#endif
             if (libPath == null)
             {
                 // search the system path, handle with and without .exe extension

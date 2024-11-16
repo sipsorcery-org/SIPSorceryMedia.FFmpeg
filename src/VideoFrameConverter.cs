@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using FFmpeg.AutoGen;
+using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -15,8 +15,8 @@ namespace SIPSorceryMedia.FFmpeg
         private readonly int _srcHeight;
         private readonly int _dstWidth;
         private readonly int _dstHeight;
-        private readonly byte_ptrArray4 _dstData;
-        private readonly int_array4 _dstLinesize;
+        private readonly byte_ptr4 _dstData;
+        private readonly int4 _dstLinesize;
         private readonly SwsContext* _pConvertContext;
         private readonly AVPixelFormat _srcPixelFormat;
         private readonly AVPixelFormat _dstPixelFormat;
@@ -49,8 +49,8 @@ namespace SIPSorceryMedia.FFmpeg
             var convertedFrameBufferSize = ffmpeg.av_image_get_buffer_size(destinationPixelFormat, dstWidth, dstHeight, 1).ThrowExceptionIfError();
 
             _convertedFrameBufferPtr = Marshal.AllocHGlobal(convertedFrameBufferSize);
-            _dstData = new byte_ptrArray4();
-            _dstLinesize = new int_array4();
+            _dstData = new byte_ptr4();
+            _dstLinesize = new int4();
 
             ffmpeg.av_image_fill_arrays(ref _dstData, ref _dstLinesize, (byte*)_convertedFrameBufferPtr, destinationPixelFormat, dstWidth, dstHeight, 1)
                 .ThrowExceptionIfError();
@@ -100,16 +100,16 @@ namespace SIPSorceryMedia.FFmpeg
         {
             EnsureNotDisposed();
 
-            byte_ptrArray4 src = new byte_ptrArray4();
-            int_array4 srcStride = new int_array4();
+            byte_ptr4 src = new byte_ptr4();
+            int4 srcStride = new int4();
 
             ffmpeg.av_image_fill_arrays(ref src, ref srcStride, pSrcData, _srcPixelFormat, _srcWidth, _srcHeight, 1).ThrowExceptionIfError();
 
             ffmpeg.sws_scale(_pConvertContext, src, srcStride, 0, _srcHeight, _dstData, _dstLinesize).ThrowExceptionIfError();
 
-            var data = new byte_ptrArray8();
+            var data = new byte_ptr8();
             data.UpdateFrom(_dstData);
-            var linesize = new int_array8();
+            var linesize = new int8();
             linesize.UpdateFrom(_dstLinesize);
 
             return new AVFrame
@@ -131,8 +131,8 @@ namespace SIPSorceryMedia.FFmpeg
             //int linesz1 = ffmpeg.av_image_get_linesize(_srcPixelFormat, _dstSize.Width, 1);
             //int linesz2 = ffmpeg.av_image_get_linesize(_srcPixelFormat, _dstSize.Width, 2);
 
-            byte_ptrArray4 src = new byte_ptrArray4();
-            int_array4 srcStride = new int_array4();
+            byte_ptr4 src = new byte_ptr4();
+            int4 srcStride = new int4();
 
             fixed (byte* pSrcData = srcData)
             {
@@ -178,9 +178,9 @@ namespace SIPSorceryMedia.FFmpeg
                     };
                 }
 
-                var data = new byte_ptrArray8();
+                var data = new byte_ptr8();
                 data.UpdateFrom(_dstData);
-                var linesize = new int_array8();
+                var linesize = new int8();
                 linesize.UpdateFrom(_dstLinesize);
 
                 return new AVFrame
@@ -216,8 +216,8 @@ namespace SIPSorceryMedia.FFmpeg
             //int linesz1 = ffmpeg.av_image_get_linesize(_srcPixelFormat, _dstSize.Width, 1);
             //int linesz2 = ffmpeg.av_image_get_linesize(_srcPixelFormat, _dstSize.Width, 2);
 
-            //byte_ptrArray4 src = new byte_ptrArray4();
-            //int_array4 srcStride = new int_array4();
+            //byte_ptr4 src = new byte_ptr4();
+            //int4 srcStride = new int4();
 
             //fixed (byte* pSrcData = srcData)
             //{

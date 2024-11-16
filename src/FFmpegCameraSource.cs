@@ -1,4 +1,4 @@
-﻿using FFmpeg.AutoGen;
+﻿using FFmpeg.AutoGen.Abstractions;
 using Microsoft.Extensions.Logging;
 using SIPSorcery;
 using SIPSorceryMedia.Abstractions;
@@ -19,10 +19,10 @@ namespace SIPSorceryMedia.FFmpeg
         private readonly Camera _camera;
 
         /// <summary>
-        /// Construct an FFmpeg camera/input device source provided input path.
+        /// Construct an FFmpeg camera/input device source provided input camera.Path.
         /// </summary>
         /// <remarks>See </remarks>
-        /// <param name="path"></param>
+        /// <param name="camera.Path"></param>
         public FFmpegCameraSource(string path) : this(FFmpegCameraManager.GetCameraByPath(path) ?? new() { Path = path })
         {
         }
@@ -39,15 +39,19 @@ namespace SIPSorceryMedia.FFmpeg
             string inputFormat = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "dshow"
                                     : RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? "v4l2"
                                     : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "avfoundation"
-                                    : throw new NotSupportedException($"Cannot find adequate input format" +
-                                                $" - OSArchitecture:[{RuntimeInformation.OSArchitecture}]" +
-                                                $" - OSDescription:[{RuntimeInformation.OSDescription}]");
+#if NET5_0_OR_GREATER
+                                    : OperatingSystem.IsAndroid() ? "android_camera"
+                                    : OperatingSystem.IsIOS() ? "avfoundation"
+#endif
+                                    : throw new NotSupportedException($"Cannot find adequate input format - OSArchitecture:[{RuntimeInformation.OSArchitecture}] - OSDescription:[{RuntimeInformation.OSDescription}]");
 
-            var _aVInputFormat = ffmpeg.av_find_input_format(inputFormat);
-
-            CreateVideoDecoder(_camera.Path, _aVInputFormat, false, true);
-
-            InitialiseDecoder();
+            AVInputFormat* aVInputFormat = ffmpeg.av_find_input_format(inputFormat);
+            var decoderOptions = new Dictionary<string, string>();
+#if ANDROID
+            decoderOptions["camera_index"] = camera.Path;
+#endif
+            CreateVideoDecoder(camera.Path, aVInputFormat, false, true);
+            InitialiseDecoder(decoderOptions);
         }
 
         /// <summary>

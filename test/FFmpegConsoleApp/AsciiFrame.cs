@@ -1,4 +1,4 @@
-﻿using FFmpeg.AutoGen;
+﻿using FFmpeg.AutoGen.Abstractions;
 using SIPSorceryMedia.Abstractions;
 using SIPSorceryMedia.FFmpeg;
 using System;
@@ -36,7 +36,7 @@ namespace FFmpegConsoleApp
                 // We can't just override converter
                 // We have to dispose the previous one and instanciate a new one with the new window size.
                 grayConverter?.Dispose();
-                grayConverter = new VideoFrameConverter(rawImage.Width, rawImage.Height, AVPixelFormat.AV_PIX_FMT_RGB24, Console.WindowWidth, Console.WindowHeight - nbLinesForFooter, FFmpeg.AutoGen.AVPixelFormat.AV_PIX_FMT_GRAY8);
+                grayConverter = new VideoFrameConverter(rawImage.Width, rawImage.Height, AVPixelFormat.AV_PIX_FMT_RGB24, Console.WindowWidth, Console.WindowHeight - nbLinesForFooter, AVPixelFormat.AV_PIX_FMT_GRAY8);
             }
 
             // Resize the frame to the size of the terminal window, then draw it in ASCII.
