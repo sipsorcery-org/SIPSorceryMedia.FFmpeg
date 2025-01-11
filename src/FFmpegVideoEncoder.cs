@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
 using SIPSorceryMedia.Abstractions;
+using static FFmpeg.AutoGen.ffmpeg;
 
 namespace SIPSorceryMedia.FFmpeg
 {
@@ -29,8 +30,8 @@ namespace SIPSorceryMedia.FFmpeg
         private VideoFrameConverter? _i420ToRgb;
         private bool _isEncoderInitialised = false;
         private bool _isDecoderInitialised = false;
-        private Object _encoderLock = new object();
-        private Object _decoderLock = new object();
+        private object _encoderLock = new object();
+        private object _decoderLock = new object();
 
         private long? _bit_rate = null;
         private int? _bit_rate_tolerance = null;
@@ -50,8 +51,8 @@ namespace SIPSorceryMedia.FFmpeg
             _encoderOptions = encoderOptions ?? new Dictionary<string, string>();
             _HwDeviceType = HWDeviceType;
 
-            //ffmpeg.av_log_set_level(ffmpeg.AV_LOG_VERBOSE);
-            //ffmpeg.av_log_set_level(ffmpeg.AV_LOG_TRACE);
+            //av_log_set_level(AV_LOG_VERBOSE);
+            //av_log_set_level(AV_LOG_TRACE);
         }
 
         public byte[]? EncodeVideo(int width, int height, byte[] sample, VideoPixelFormatsEnum pixelFormat, VideoCodecsEnum codec)
@@ -133,6 +134,34 @@ namespace SIPSorceryMedia.FFmpeg
             }
         }
 
+        public VideoFormat Format { get; set; }
+        private static double AdjustBppForComplexity(double baseBpp, double complexityFactor)
+        {
+            // Clamp complexityFactor between 0.8 and 1.2 to prevent extreme adjustments
+            complexityFactor = Math.Max(0.8, Math.Min(complexityFactor, 1.2));
+            return baseBpp * complexityFactor;
+        }
+        private void CalculateVp8BitrateParameters(
+            int width,
+            int height,
+            double frameRate,
+            double baseBpp,
+            double complexityFactor = 1.0)
+        {
+            double adjustedBpp = AdjustBppForComplexity(baseBpp, complexityFactor);
+            long pixelsPerFrame = (long)width * height;
+            long bitRate = (long)(pixelsPerFrame * adjustedBpp * frameRate);
+            _encoderContext->bit_rate = bitRate;
+
+            int bitRateTolerance = (int)(bitRate * 0.10);
+            _encoderContext->bit_rate_tolerance = bitRateTolerance;
+
+            long rcMinRate = (long)(bitRate * 0.80);
+            long rcMaxRate = (long)(bitRate * 1.20);
+            _encoderContext->rc_min_rate = rcMinRate;
+            _encoderContext->rc_max_rate = rcMaxRate;
+        }
+
         private void InitialiseEncoder(AVCodecID codecID, int width, int height, int fps)
         {
             if (!_isEncoderInitialised)
@@ -140,13 +169,13 @@ namespace SIPSorceryMedia.FFmpeg
                 _isEncoderInitialised = true;
 
                 _codecID = codecID;
-                AVCodec* codec = ffmpeg.avcodec_find_encoder(codecID);
+                AVCodec* codec = avcodec_find_encoder(codecID);
                 if (codec == null)
                 {
                     throw new ApplicationException($"Codec encoder could not be found for {codecID}.");
                 }
 
-                _encoderContext = ffmpeg.avcodec_alloc_context3(codec);
+                _encoderContext = avcodec_alloc_context3(codec);
                 if (_encoderContext == null)
                 {
                     throw new ApplicationException("Failed to allocate encoder codec context.");
@@ -175,26 +204,46 @@ namespace SIPSorceryMedia.FFmpeg
 
                 if (_codecID == AVCodecID.AV_CODEC_ID_H264)
                 {
-                    //_videoCodecContext->profile = ffmpeg.FF_PROFILE_H264_CONSTRAINED_BASELINE;
-                    ffmpeg.av_opt_set(_encoderContext->priv_data, "profile", "baseline", 0).ThrowExceptionIfError();
-                    //ffmpeg.av_opt_set(_videoCodecContext->priv_data, "packetization-mode", "0", 0).ThrowExceptionIfError();
-                    //ffmpeg.av_opt_set(_pCodecContext->priv_data, "preset", "veryslow", 0);
-                    //ffmpeg.av_opt_set(_videoCodecContext->priv_data, "profile-level-id", "42e01f", 0);
+                    var parameters = Helper.ParseWebRtcParameters(Format.Parameters);
+                    bool configured = false;
+                    if (parameters.TryGetValue("profile-level-id", out string? profileLevelId))
+                    {
+                        if (profileLevelId!=null && profileLevelId.Length == 6)
+                        {
+                            string profileHex = profileLevelId.Substring(0, 2);
+                            string levelHex = profileLevelId.Substring(4, 2);
 
-                    ffmpeg.av_opt_set(_encoderContext->priv_data, "tune", "zerolatency", 0).ThrowExceptionIfError();
+                            string profile = Helper.GetH264ProfileName(profileHex);
+                            string level = Helper.GetH264LevelValue(levelHex);
+
+                            if (!string.IsNullOrEmpty(profile) && !string.IsNullOrEmpty(level))
+                            {
+                                av_opt_set(_encoderContext->priv_data, "profile", profile, AV_OPT_SEARCH_CHILDREN);
+                                av_opt_set(_encoderContext->priv_data, "level", level, AV_OPT_SEARCH_CHILDREN);
+                                configured = true;
+                            }
+                        }
+
+                    }
+                    if (!configured)
+                    {
+                        av_opt_set(_encoderContext->priv_data, "profile", "baseline", AV_OPT_SEARCH_CHILDREN);
+                    }
+                    av_opt_set(_encoderContext->priv_data, "tune", "zerolatency", 0);
                 }
                 else if ((_codecID == AVCodecID.AV_CODEC_ID_VP8) || (_codecID == AVCodecID.AV_CODEC_ID_VP9))
                 {
-                    ffmpeg.av_opt_set(_encoderContext->priv_data, "quality", "realtime", 0).ThrowExceptionIfError();
+                    av_opt_set(_encoderContext->priv_data, "quality", "realtime", 0).ThrowExceptionIfError();
+                    CalculateVp8BitrateParameters(width, height, fps, 0.1);
                 }
 
                 foreach (var option in _encoderOptions)
                 {
-                    ffmpeg.av_opt_set(_encoderContext->priv_data, option.Key, option.Value, 0).ThrowExceptionIfError();
+                    av_opt_set(_encoderContext->priv_data, option.Key, option.Value, 0).ThrowExceptionIfError();
                 }
 
 
-                ffmpeg.avcodec_open2(_encoderContext, codec, null).ThrowExceptionIfError();
+                avcodec_open2(_encoderContext, codec, null).ThrowExceptionIfError();
 
                 logger.LogDebug($"Successfully initialised ffmpeg based image encoder: CodecId:[{codecID}] - {width}:{height} - {fps} Fps");
             }
@@ -227,7 +276,7 @@ namespace SIPSorceryMedia.FFmpeg
                     _isEncoderInitialised = false;
                     fixed (AVCodecContext** pCtx = &_encoderContext)
                     {
-                        ffmpeg.avcodec_free_context(pCtx);
+                        avcodec_free_context(pCtx);
                     }
                 }
             }
@@ -240,13 +289,13 @@ namespace SIPSorceryMedia.FFmpeg
                 _isDecoderInitialised = true;
 
                 _codecID = codecID;
-                AVCodec* codec = ffmpeg.avcodec_find_decoder(codecID);
+                AVCodec* codec = avcodec_find_decoder(codecID);
                 if (codec == null)
                 {
                     throw new ApplicationException($"Codec encoder could not be found for {codecID}.");
                 }
 
-                _decoderContext = ffmpeg.avcodec_alloc_context3(codec);
+                _decoderContext = avcodec_alloc_context3(codec);
                 if (_decoderContext == null)
                 {
                     throw new ApplicationException("Failed to allocate decoder codec context.");
@@ -254,10 +303,10 @@ namespace SIPSorceryMedia.FFmpeg
 
                 if (_HwDeviceType != AVHWDeviceType.AV_HWDEVICE_TYPE_NONE)
                 {
-                    ffmpeg.av_hwdevice_ctx_create(&_decoderContext->hw_device_ctx, _HwDeviceType, null, null, 0).ThrowExceptionIfError();
+                    av_hwdevice_ctx_create(&_decoderContext->hw_device_ctx, _HwDeviceType, null, null, 0).ThrowExceptionIfError();
                 }
 
-                ffmpeg.avcodec_open2(_decoderContext, codec, null).ThrowExceptionIfError();
+                avcodec_open2(_decoderContext, codec, null).ThrowExceptionIfError();
 
                 logger.LogDebug($"[InitialiseDecoder] CodecId:[{codecID}");
             }
@@ -265,7 +314,7 @@ namespace SIPSorceryMedia.FFmpeg
 
         public string GetCodecName()
         {
-            return ffmpeg.avcodec_get_name(_codecID);
+            return avcodec_get_name(_codecID);
         }
 
         public AVFrame MakeFrame(byte* sample, int width, int height)
@@ -281,7 +330,7 @@ namespace SIPSorceryMedia.FFmpeg
             var data = new byte_ptrArray4();
             var linesize = new int_array4();
 
-            ffmpeg.av_image_fill_arrays(ref data, ref linesize, sample, AVPixelFormat.AV_PIX_FMT_YUV420P, width, height, 1).ThrowExceptionIfError();
+            av_image_fill_arrays(ref data, ref linesize, sample, AVPixelFormat.AV_PIX_FMT_YUV420P, width, height, 1).ThrowExceptionIfError();
 
             avFrame.data.UpdateFrom(data);
             avFrame.linesize.UpdateFrom(linesize);
@@ -338,89 +387,93 @@ namespace SIPSorceryMedia.FFmpeg
 
         public byte[]? Encode(AVCodecID codecID, AVFrame avFrame, int fps, bool keyFrame = false)
         {
-            if (!_isDisposed)
+            if (_isDisposed)
             {
-                lock (_encoderLock)
+                return null;
+            }
+            lock (_encoderLock)
+            {
+                //double check locking
+                if (_isDisposed)
                 {
-                    int width = avFrame.width;
-                    int height = avFrame.height;
+                    return null;
+                }
+                int width = avFrame.width;
+                int height = avFrame.height;
 
-                    if (!_isEncoderInitialised)
+                if (!_isEncoderInitialised)
+                {
+                    InitialiseEncoder(codecID, width, height, fps);
+                }
+                else if (_encoderContext->width != width || _encoderContext->height != height)
+                {
+                    _encoderContext->width = width;
+                    _encoderContext->height = height;
+                }
+
+                int _linesizeY = width;
+                int _linesizeU = width / 2;
+                int _linesizeV = width / 2;
+
+                int _ySize = _linesizeY * height;
+                int _uSize = _linesizeU * height / 2;
+
+                if (avFrame.format != (int)_encoderContext->pix_fmt) throw new ArgumentException("Invalid pixel format.", nameof(avFrame));
+                if (avFrame.width != width) throw new ArgumentException("Invalid width.", nameof(avFrame));
+                if (avFrame.height != height) throw new ArgumentException("Invalid height.", nameof(avFrame));
+                if (avFrame.linesize[0] < _linesizeY) throw new ArgumentException("Invalid Y linesize.", nameof(avFrame));
+                if (avFrame.linesize[1] < _linesizeU) throw new ArgumentException("Invalid U linesize.", nameof(avFrame));
+                if (avFrame.linesize[2] < _linesizeV) throw new ArgumentException("Invalid V linesize.", nameof(avFrame));
+
+                if (keyFrame || _forceKeyFrame)
+                {
+                    avFrame.flags |= AV_FRAME_FLAG_KEY;
+                    _forceKeyFrame = false;
+                }
+
+                avFrame.pts = _pts++;
+
+                var pPacket = av_packet_alloc();
+
+                try
+                {
+                    avcodec_send_frame(_encoderContext, &avFrame).ThrowExceptionIfError();
+                    int error = avcodec_receive_packet(_encoderContext, pPacket);
+
+                    //TODO: A frame can contain multiple packets - need to return a List<byte[]> or use events
+
+                    if (error == 0)
                     {
-                        InitialiseEncoder(codecID, width, height, fps);
-                    }
-                    else if (_encoderContext->width != width || _encoderContext->height != height)
-                    {
-                        _encoderContext->width = width;
-                        _encoderContext->height = height;
-                    }
-
-                    int _linesizeY = width;
-                    int _linesizeU = width / 2;
-                    int _linesizeV = width / 2;
-
-                    int _ySize = _linesizeY * height;
-                    int _uSize = _linesizeU * height / 2;
-
-                    if (avFrame.format != (int)_encoderContext->pix_fmt) throw new ArgumentException("Invalid pixel format.", nameof(avFrame));
-                    if (avFrame.width != width) throw new ArgumentException("Invalid width.", nameof(avFrame));
-                    if (avFrame.height != height) throw new ArgumentException("Invalid height.", nameof(avFrame));
-                    if (avFrame.linesize[0] < _linesizeY) throw new ArgumentException("Invalid Y linesize.", nameof(avFrame));
-                    if (avFrame.linesize[1] < _linesizeU) throw new ArgumentException("Invalid U linesize.", nameof(avFrame));
-                    if (avFrame.linesize[2] < _linesizeV) throw new ArgumentException("Invalid V linesize.", nameof(avFrame));
-
-                    if (keyFrame || _forceKeyFrame)
-                    {
-                        avFrame.key_frame = 1;
-                        _forceKeyFrame = false;
-                    }
-
-                    avFrame.pts = _pts++;
-
-                    var pPacket = ffmpeg.av_packet_alloc();
-
-                    try
-                    {
-                        ffmpeg.avcodec_send_frame(_encoderContext, &avFrame).ThrowExceptionIfError();
-                        int error = ffmpeg.avcodec_receive_packet(_encoderContext, pPacket);
-
-                        if (error == 0)
+                        if (_codecID == AVCodecID.AV_CODEC_ID_H264)
                         {
-                            if (_codecID == AVCodecID.AV_CODEC_ID_H264)
-                            {
-                                // TODO: Work out how to use the FFmpeg H264 bit stream parser to extract the NALs.
-                                // Currently it's being done in the RTPSession class.
-                                byte[] arr = new byte[pPacket->size];
-                                Marshal.Copy((IntPtr)pPacket->data, arr, 0, pPacket->size);
-                                return arr;
-                            }
-                            else
-                            {
-                                byte[] arr = new byte[pPacket->size];
-                                Marshal.Copy((IntPtr)pPacket->data, arr, 0, pPacket->size);
-                                return arr;
-                            }
-                        }
-                        else if (error == ffmpeg.AVERROR(ffmpeg.EAGAIN))
-                        {
-                            logger.LogDebug("Video encoder needs more data.");
-                            return null;
+                            // TODO: Work out how to use the FFmpeg H264 bit stream parser to extract the NALs.
+                            // Currently it's being done in the RTPSession class.
+                            byte[] arr = new byte[pPacket->size];
+                            Marshal.Copy((IntPtr)pPacket->data, arr, 0, pPacket->size);
+                            return arr;
                         }
                         else
                         {
-                            error.ThrowExceptionIfError();
-                            return null;
+                            byte[] arr = new byte[pPacket->size];
+                            Marshal.Copy((IntPtr)pPacket->data, arr, 0, pPacket->size);
+                            return arr;
                         }
                     }
-                    finally
+                    else if (error == AVERROR(EAGAIN))
                     {
-                        ffmpeg.av_packet_unref(pPacket);
+                        logger.LogDebug("Video encoder needs more data.");
+                        return null;
+                    }
+                    else
+                    {
+                        error.ThrowExceptionIfError();
+                        return null;
                     }
                 }
-            }
-            else
-            {
-                return null;
+                finally
+                {
+                    av_packet_unref(pPacket);
+                }
             }
         }
 
@@ -430,23 +483,23 @@ namespace SIPSorceryMedia.FFmpeg
             {
                 lock (_decoderLock)
                 {
-                    AVPacket* packet = ffmpeg.av_packet_alloc();
+                    AVPacket* packet = av_packet_alloc();
 
                     try
                     {
-                        var paddedBuffer = new byte[buffer.Length + ffmpeg.AV_INPUT_BUFFER_PADDING_SIZE];
+                        var paddedBuffer = new byte[buffer.Length + AV_INPUT_BUFFER_PADDING_SIZE];
                         Buffer.BlockCopy(buffer, 0, paddedBuffer, 0, buffer.Length);
 
                         fixed (byte* pBuffer = paddedBuffer)
                         {
-                            ffmpeg.av_packet_from_data(packet, pBuffer, paddedBuffer.Length).ThrowExceptionIfError();
+                            av_packet_from_data(packet, pBuffer, paddedBuffer.Length).ThrowExceptionIfError();
                             return DecodeFaster(codecID, packet, out width, out height);
                         }
                     }
                     finally
                     {
-                        ffmpeg.av_packet_from_data(packet, (byte*)IntPtr.Zero, 0);
-                        ffmpeg.av_packet_free(&packet);
+                        av_packet_from_data(packet, (byte*)IntPtr.Zero, 0);
+                        av_packet_free(&packet);
                     }
                 }
             }
@@ -467,20 +520,20 @@ namespace SIPSorceryMedia.FFmpeg
                 if (!_isDecoderInitialised)
                 {
                     InitialiseDecoder(codecID);
-                    _frame = ffmpeg.av_frame_alloc();
-                    _gpuFrame = ffmpeg.av_frame_alloc();
+                    _frame = av_frame_alloc();
+                    _gpuFrame = av_frame_alloc();
                 }
 
                 List<RawImage> rgbFrames = new List<RawImage>();
-                if (ffmpeg.avcodec_send_packet(_decoderContext, packet) < 0)
+                if (avcodec_send_packet(_decoderContext, packet) < 0)
                 {
                     width = height = 0;
                     return null;
                 }
 
-                ffmpeg.av_frame_unref(_frame);
-                ffmpeg.av_frame_unref(_gpuFrame);
-                int recvRes = ffmpeg.avcodec_receive_frame(_decoderContext, _frame);
+                av_frame_unref(_frame);
+                av_frame_unref(_gpuFrame);
+                int recvRes = avcodec_receive_frame(_decoderContext, _frame);
 
                 while (recvRes == 0)
                 {
@@ -490,7 +543,7 @@ namespace SIPSorceryMedia.FFmpeg
                     {
                         // If this is hw accelerated, the data in `frame` resides in the GPU memory
                         // Copy it to the CPU memory (gpuFrame)
-                        ffmpeg.av_hwframe_transfer_data(_gpuFrame, _frame, 0).ThrowExceptionIfError();
+                        av_hwframe_transfer_data(_gpuFrame, _frame, 0).ThrowExceptionIfError();
                         decodedFrame = _gpuFrame;
                     }
 
@@ -535,12 +588,12 @@ namespace SIPSorceryMedia.FFmpeg
                         rgbFrames.Add(imageRawSample);
                     }
 
-                    ffmpeg.av_frame_unref(_frame);
-                    ffmpeg.av_frame_unref(_gpuFrame);
-                    recvRes = ffmpeg.avcodec_receive_frame(_decoderContext, _frame);
+                    av_frame_unref(_frame);
+                    av_frame_unref(_gpuFrame);
+                    recvRes = avcodec_receive_frame(_decoderContext, _frame);
                 }
 
-                if (recvRes < 0 && recvRes != ffmpeg.AVERROR(ffmpeg.EAGAIN))
+                if (recvRes < 0 && recvRes != AVERROR(EAGAIN))
                 {
                     //recvRes.ThrowExceptionIfError();
                 }
@@ -567,7 +620,7 @@ namespace SIPSorceryMedia.FFmpeg
                 {
                     fixed (AVCodecContext** pCtx = &_encoderContext)
                     {
-                        ffmpeg.avcodec_free_context(pCtx);
+                        avcodec_free_context(pCtx);
                     }
                 }
 
@@ -575,7 +628,7 @@ namespace SIPSorceryMedia.FFmpeg
                 {
                     fixed (AVCodecContext** pCtx = &_decoderContext)
                     {
-                        ffmpeg.avcodec_free_context(pCtx);
+                        avcodec_free_context(pCtx);
                     }
                 }
 
@@ -583,7 +636,7 @@ namespace SIPSorceryMedia.FFmpeg
                 {
                     fixed (AVFrame** pFrame = &_frame)
                     {
-                        ffmpeg.av_frame_free(pFrame);
+                        av_frame_free(pFrame);
                     }
                 }
 
@@ -591,7 +644,7 @@ namespace SIPSorceryMedia.FFmpeg
                 {
                     fixed (AVFrame** pFrame = &_gpuFrame)
                     {
-                        ffmpeg.av_frame_free(pFrame);
+                        av_frame_free(pFrame);
                     }
                 }
             }

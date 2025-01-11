@@ -85,6 +85,11 @@ namespace SIPSorceryMedia.FFmpeg
         {
             logger.LogDebug($"Setting video source format to {videoFormat.FormatID}:{videoFormat.Codec} {videoFormat.ClockRate}.");
             _videoFormatManager.SetSelectedFormat(videoFormat);
+            if (_videoEncoder != null)
+            {
+                //TODO: A reference to _videoFormatManager should really be in the _videoEncoder constructor
+                _videoEncoder.Format = videoFormat;
+            }
             InitialiseDecoder();
         }
 
