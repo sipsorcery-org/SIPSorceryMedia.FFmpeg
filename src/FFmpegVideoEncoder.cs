@@ -1,9 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using FFmpeg.AutoGen;
+﻿using FFmpeg.AutoGen;
 using Microsoft.Extensions.Logging;
 using SIPSorceryMedia.Abstractions;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace SIPSorceryMedia.FFmpeg
 {
@@ -17,6 +18,8 @@ namespace SIPSorceryMedia.FFmpeg
         }
 
         private readonly Dictionary<string, string> _encoderOptions;
+        private Stopwatch _frameTimer;
+        public event EventHandler<VideoEncoderStatistics> OnVideoEncoderStatistics;
 
         private AVCodecContext* _encoderContext;
         private AVCodecContext* _decoderContext;
@@ -38,6 +41,7 @@ namespace SIPSorceryMedia.FFmpeg
         private long? _rc_max_rate = null;
 
         private int? _thread_count = null;
+        private long _lastFrameTicks = 0;
 
         private bool _forceKeyFrame;
         private int _pts = 0;
@@ -135,7 +139,6 @@ namespace SIPSorceryMedia.FFmpeg
             if (!_isEncoderInitialised)
             {
                 _isEncoderInitialised = true;
-
                 _codecID = codecID;
                 AVCodec* codec = ffmpeg.avcodec_find_encoder(codecID);
                 if (codec == null)
@@ -333,50 +336,82 @@ namespace SIPSorceryMedia.FFmpeg
             return avFrame;
         }
 
+        private bool CheckDropFrame()
+        {
+            if (_frameTimer == null)
+            {
+                _frameTimer = new Stopwatch();
+                _frameTimer.Start();
+            }
+            // Calculate frame interval in ticks based on Stopwatch frequency.
+            // frameIntervalMs = 1000 / framerate, convert ms to ticks: frameIntervalTicks = frameIntervalMs * Stopwatch.Frequency / 1000
+            long frameIntervalTicks = (long)(1000.0 / _encoderContext->framerate.num * Stopwatch.Frequency / 1000);
+
+            long nowTicks = _frameTimer.ElapsedTicks;
+            if (_lastFrameTicks != 0)
+            {
+                if (nowTicks - _lastFrameTicks < frameIntervalTicks)
+                {
+                    // Drop frame if not enough time has passed.
+                    return true;
+                }
+            }
+
+            _lastFrameTicks = nowTicks;
+            return false;
+        }
+
         public byte[]? Encode(AVCodecID codecID, byte* sample, int width, int height, int fps, bool keyFrame = false, AVPixelFormat pixelFormat = AVPixelFormat.AV_PIX_FMT_YUV420P)
         {
-            lock (_encoderLock)
+            if (!_isDisposed)
             {
-                if (!_isDisposed)
+                lock (_encoderLock)
                 {
-                    if (!_isEncoderInitialised)
+                    if (!_isDisposed)
                     {
-                        InitialiseEncoder(codecID, width, height, fps);
-                    }
-                    else if (_encoderContext->width != width || _encoderContext->height != height)
-                    {
-                        _encoderContext->width = width;
-                        _encoderContext->height = height;
-                    }
+                        if (!_isEncoderInitialised)
+                        {
+                            InitialiseEncoder(codecID, width, height, fps);
+                        }
+                        else if (_encoderContext->width != width || _encoderContext->height != height)
+                        {
+                            _encoderContext->width = width;
+                            _encoderContext->height = height;
+                        }
 
-                    AVFrame avFrame = new AVFrame();
+                        AVFrame avFrame = new AVFrame();
 
-                    if (pixelFormat == AVPixelFormat.AV_PIX_FMT_YUV420P)
-                    {
-                        avFrame = MakeFrame(sample, width, height);
+                        if (pixelFormat == AVPixelFormat.AV_PIX_FMT_YUV420P)
+                        {
+                            avFrame = MakeFrame(sample, width, height);
+                        }
+                        else
+                        {
+                            if (_encoderPixelConverter == null ||
+                               _encoderPixelConverter.SourceWidth != width ||
+                               _encoderPixelConverter.SourceHeight != height)
+                            {
+                                _encoderPixelConverter = new VideoFrameConverter(
+                                   width, height,
+                                   pixelFormat,
+                                   width, height,
+                                   AVPixelFormat.AV_PIX_FMT_YUV420P);
+                            }
+
+                            avFrame = _encoderPixelConverter.Convert(sample);
+                        }
+
+                        return Encode(codecID, &avFrame, fps, keyFrame);
                     }
                     else
                     {
-                        if (_encoderPixelConverter == null ||
-                           _encoderPixelConverter.SourceWidth != width ||
-                           _encoderPixelConverter.SourceHeight != height)
-                        {
-                            _encoderPixelConverter = new VideoFrameConverter(
-                               width, height,
-                               pixelFormat,
-                               width, height,
-                               AVPixelFormat.AV_PIX_FMT_YUV420P);
-                        }
-
-                        avFrame = _encoderPixelConverter.Convert(sample);
+                        return null;
                     }
-
-                    return Encode(codecID, &avFrame, fps, keyFrame);
                 }
-                else
-                {
-                    return null;
-                }
+            }
+            else
+            {
+                return null;
             }
         }
 
@@ -384,6 +419,9 @@ namespace SIPSorceryMedia.FFmpeg
         {
             if (!_isDisposed)
             {
+                if (OnVideoEncoderStatistics != null && CheckDropFrame()) {
+                    return null;
+                }
                 lock (_encoderLock)
                 {
                     int width = avFrame->width;
@@ -422,7 +460,7 @@ namespace SIPSorceryMedia.FFmpeg
                     avFrame->pts = _pts++;
 
                     var pPacket = ffmpeg.av_packet_alloc();
-
+                    OnVideoEncoderStatistics?.Invoke(this, new VideoEncoderStatistics(width, height, fps, FFmpegConvert.GetVideoCodecEnum(_codecID)));
                     try
                     {
                         ffmpeg.avcodec_send_frame(_encoderContext, avFrame).ThrowExceptionIfError();
@@ -466,6 +504,35 @@ namespace SIPSorceryMedia.FFmpeg
             {
                 return null;
             }
+        }
+
+        public void AdjustStream(int bitrate, int fps)
+        {
+            
+            if (_encoderContext == null)
+                return;
+            lock (_encoderLock)
+            {
+                if (_encoderContext == null)
+                    return;
+                _encoderContext->bit_rate = bitrate;
+                _encoderContext->framerate.num = fps;
+                _encoderContext->gop_size = Math.Max(5, fps * 2);
+                switch(_encoderContext->codec_id)
+                {
+                    case AVCodecID.AV_CODEC_ID_VP8:
+                        _encoderContext->rc_max_rate = (long)(_encoderContext->bit_rate * 1.2);
+                        _encoderContext->rc_min_rate = (long)(_encoderContext->bit_rate * 0.75);
+                        _encoderContext->bit_rate_tolerance = (int)(_encoderContext->bit_rate * 0.15); // 15% tolerance for slight bitrate fluctuations
+                        _encoderContext->rc_buffer_size = (int)(_encoderContext->bit_rate * 1.5); // 1.5x target bitrate buffer
+                        break;
+                    case AVCodecID.AV_CODEC_ID_H264:
+                        
+                        break;
+                }
+                
+            }
+            
         }
 
         public List<RawImage>? DecodeFaster(AVCodecID codecID, byte[] buffer, out int width, out int height)
@@ -641,6 +708,8 @@ namespace SIPSorceryMedia.FFmpeg
                         ffmpeg.av_frame_free(pFrame);
                     }
                 }
+
+                _frameTimer?.Stop();
             }
         }
     }
