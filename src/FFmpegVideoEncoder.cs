@@ -279,6 +279,10 @@ namespace SIPSorceryMedia.FFmpeg
                     case "libvpx":
                         ffmpeg.av_opt_set(_encoderContext->priv_data, "quality", "realtime", 0).ThrowExceptionIfError();
                         break;
+                    case "libx265":
+                        ffmpeg.av_opt_set(_encoderContext->priv_data, "preset", "ultrafast", 0).ThrowExceptionIfError();
+                        ffmpeg.av_opt_set(_encoderContext->priv_data, "tune", "zerolatency", 0).ThrowExceptionIfError();
+                        break;
                     default:
                         break;
                 }
@@ -347,6 +351,22 @@ namespace SIPSorceryMedia.FFmpeg
                     fixed (AVCodecContext** pCtx = &_decoderContext)
                     {
                         ffmpeg.avcodec_free_context(pCtx);
+                    }
+                }
+
+                if (_frame != null)
+                {
+                    fixed (AVFrame** pFrame = &_frame)
+                    {
+                        ffmpeg.av_frame_free(pFrame);
+                    }
+                }
+
+                if (_gpuFrame != null)
+                {
+                    fixed (AVFrame** pFrame = &_gpuFrame)
+                    {
+                        ffmpeg.av_frame_free(pFrame);
                     }
                 }
             }
@@ -663,6 +683,9 @@ namespace SIPSorceryMedia.FFmpeg
             {
                 width = 0;
                 height = 0;
+
+                if (_isDecoderInitialised && _codecID != codecID)
+                    ResetDecoder();
 
                 if (!_isDecoderInitialised)
                 {
