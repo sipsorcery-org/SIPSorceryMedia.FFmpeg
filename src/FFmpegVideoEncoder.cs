@@ -4,6 +4,7 @@ using SIPSorceryMedia.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace SIPSorceryMedia.FFmpeg
@@ -17,7 +18,9 @@ namespace SIPSorceryMedia.FFmpeg
             get => _supportedFormats;
         }
 
-        private readonly Dictionary<string, string> _encoderOptions;
+        private readonly Dictionary<string, string> _codecOptions;
+        private Dictionary<string, Dictionary<string, string>>? _codecOptionsByName;
+
         private Stopwatch _frameTimer;
         public event EventHandler<VideoEncoderStatistics> OnVideoEncoderStatistics;
 
@@ -28,12 +31,17 @@ namespace SIPSorceryMedia.FFmpeg
         private AVFrame* _frame;
         private AVFrame* _gpuFrame;
 
+        private AVPixelFormat? _negotiatedPixFmt;
+
         private VideoFrameConverter? _encoderPixelConverter;
         private VideoFrameConverter? _i420ToRgb;
         private bool _isEncoderInitialised = false;
         private bool _isDecoderInitialised = false;
         private object _encoderLock = new object();
         private object _decoderLock = new object();
+
+        private Dictionary<AVCodecID, IntPtr/* AVCodec* */>? _specificEncoders;
+        private string? _wrapName;
 
         private long? _bit_rate = null;
         private int? _bit_rate_tolerance = null;
@@ -51,7 +59,7 @@ namespace SIPSorceryMedia.FFmpeg
 
         public FFmpegVideoEncoder(Dictionary<string, string>? encoderOptions = null, AVHWDeviceType HWDeviceType = AVHWDeviceType.AV_HWDEVICE_TYPE_NONE)
         {
-            _encoderOptions = encoderOptions ?? new Dictionary<string, string>();
+            _codecOptions = encoderOptions ?? new Dictionary<string, string>();
             _HwDeviceType = HWDeviceType;
         }
 
@@ -134,13 +142,97 @@ namespace SIPSorceryMedia.FFmpeg
             }
         }
 
+        public void SetCodec(string wrapperName)
+        {
+            _wrapName = wrapperName;
+
+            ResetEncoder();
+            ResetDecoder();
+        }
+
+        public bool SetCodec(AVCodecID cdc, string name, Dictionary<string, string>? opts = null)
+        {
+            var codec = ffmpeg.avcodec_find_encoder_by_name(name);
+
+            if (codec == null)
+            {
+                logger.LogError("Encoder for {id} with name '{name}' is Not Found.", cdc, name);
+                return false;
+            }
+
+            (_specificEncoders ??= [])[cdc] = (IntPtr)codec;
+
+            if (opts != null)
+                (_codecOptionsByName ??= [])[name] = opts;
+
+            return codec != null;
+        }
+
+        private AVCodec* GetCodec(AVCodecID codecID, string? wrapName, bool isEncoder = true)
+        {
+            if (wrapName == null)
+                return null;
+
+            IntPtr? iterator = null;
+            var cdc = ffmpeg.av_codec_iterate((void**)&iterator);
+            while (cdc != null)
+            {
+                if (cdc->id == codecID && GetNameString(cdc->wrapper_name) == wrapName
+                    && (
+                        (isEncoder && ffmpeg.av_codec_is_encoder(cdc) != 0)
+                        || (!isEncoder && ffmpeg.av_codec_is_decoder(cdc) != 0)
+                        )
+                    )
+                    break;
+
+                cdc = ffmpeg.av_codec_iterate((void**)&iterator);
+            }
+
+            (_specificEncoders ??= [])[codecID] = (IntPtr)cdc;
+            
+            if (cdc == null)
+                logger.LogWarning("Codec not found for {id} with wrapper {wrap}", codecID, _wrapName);
+
+            return cdc;
+        }
+
+        private AVCodec* GetCodec(AVCodecID codecID, bool isEncoder = true)
+        {
+            AVCodec* codec = (AVCodec*)(_specificEncoders?[codecID] ?? IntPtr.Zero);
+
+            if (codec == null)
+            {
+                codec = GetCodec(codecID, _wrapName, isEncoder);
+            }
+
+            if (codec == null)
+            {
+                if (isEncoder)
+                {
+                    codec = ffmpeg.avcodec_find_encoder(codecID);
+                }
+                else
+                {
+                    codec = ffmpeg.avcodec_find_decoder(codecID);
+                }
+            }
+
+            return codec;
+        }
+
+        private Dictionary<string, string>? GetCodecOptions(string? name)
+            => !string.IsNullOrWhiteSpace(name) ? _codecOptionsByName?[name!] ?? _codecOptions : null;
+
         public void InitialiseEncoder(AVCodecID codecID, int width, int height, int fps)
         {
             if (!_isEncoderInitialised)
             {
                 _isEncoderInitialised = true;
                 _codecID = codecID;
-                AVCodec* codec = ffmpeg.avcodec_find_encoder(codecID);
+                
+                var codec = GetCodec(codecID);
+                var encOpts = GetCodecOptions(GetNameString(codec->name));
+
                 if (codec == null)
                 {
                     throw new ApplicationException($"Codec encoder could not be found for {codecID}.");
@@ -159,7 +251,7 @@ namespace SIPSorceryMedia.FFmpeg
                 _encoderContext->framerate.den = 1;
                 _encoderContext->framerate.num = fps;
 
-                _encoderContext->pix_fmt = AVPixelFormat.AV_PIX_FMT_YUV420P;
+                _encoderContext->pix_fmt = _negotiatedPixFmt ?? codec->pix_fmts[0];
 
                 if (_bit_rate != null) _encoderContext->bit_rate = (long)_bit_rate;
                 if (_bit_rate_tolerance != null) _encoderContext->bit_rate_tolerance = (int)_bit_rate_tolerance;
@@ -173,46 +265,45 @@ namespace SIPSorceryMedia.FFmpeg
                 else
                     _encoderContext->gop_size = fps;
 
-                try
+                // provide tunings for known codecs
+                switch (GetNameString(codec->name))
                 {
-                if (_codecID == AVCodecID.AV_CODEC_ID_H264)
-                {
-                    //_videoCodecContext->profile = ffmpeg.FF_PROFILE_H264_CONSTRAINED_BASELINE;
-                    ffmpeg.av_opt_set(_encoderContext->priv_data, "profile", "baseline", 0).ThrowExceptionIfError();
-                    //ffmpeg.av_opt_set(_videoCodecContext->priv_data, "packetization-mode", "0", 0).ThrowExceptionIfError();
-                    //ffmpeg.av_opt_set(_pCodecContext->priv_data, "preset", "veryslow", 0);
-                    //ffmpeg.av_opt_set(_videoCodecContext->priv_data, "profile-level-id", "42e01f", 0);
-
-                    ffmpeg.av_opt_set(_encoderContext->priv_data, "tune", "zerolatency", 0).ThrowExceptionIfError();
+                    case "libx264":
+                        ffmpeg.av_opt_set(_encoderContext->priv_data, "profile", "baseline", 0).ThrowExceptionIfError();
+                        ffmpeg.av_opt_set(_encoderContext->priv_data, "tune", "zerolatency", 0).ThrowExceptionIfError();
+                        break;
+                    case "h264_qsv":
+                        ffmpeg.av_opt_set(_encoderContext->priv_data, "profile", "66" /* baseline */, 0).ThrowExceptionIfError();
+                        ffmpeg.av_opt_set(_encoderContext->priv_data, "preset", "7" /* veryfast */, 0).ThrowExceptionIfError();
+                        break;
+                    case "libvpx":
+                        ffmpeg.av_opt_set(_encoderContext->priv_data, "quality", "realtime", 0).ThrowExceptionIfError();
+                        break;
+                    default:
+                        break;
                 }
-                else if ((_codecID == AVCodecID.AV_CODEC_ID_VP8) || (_codecID == AVCodecID.AV_CODEC_ID_VP9))
-                {
-                    ffmpeg.av_opt_set(_encoderContext->priv_data, "quality", "realtime", 0).ThrowExceptionIfError();
-                }
-                    else if (_codecID == AVCodecID.AV_CODEC_ID_HEVC
-                        && Marshal.PtrToStringAnsi((IntPtr)codec->name) == "libx265")
-                    {
-                        //ffmpeg.av_opt_set(_encoderContext->priv_data, "forced-idr", "1", 0).ThrowExceptionIfError();
 
                         //ffmpeg.av_opt_set(_encoderContext->priv_data, "crf", "28", 0);
                         ffmpeg.av_opt_set(_encoderContext->priv_data, "preset", "ultrafast", 0).ThrowExceptionIfError();
                         ffmpeg.av_opt_set(_encoderContext->priv_data, "tune", "zerolatency", 0).ThrowExceptionIfError();
                     }
 
-                foreach (var option in _encoderOptions)
+                foreach (var option in encOpts)
                 {
-                    ffmpeg.av_opt_set(_encoderContext->priv_data, option.Key, option.Value, 0).ThrowExceptionIfError();
-                }
-                }
-                catch (Exception e)
-                {
-                    var name = Marshal.PtrToStringAnsi((IntPtr)codec->name);
-                    logger.LogError("Error in setting options for encoder [{name}]: {message}", name, e.Message);
-                }
+                    try
+                    {
+                        ffmpeg.av_opt_set(_encoderContext->priv_data, option.Key, option.Value, 0).ThrowExceptionIfError();
+                    }
+                    catch (Exception excp)
+                    {
+                        logger.LogWarning("Failed to set encoder option \"{key}\"=\"{val}\", Skipping this option. {msg}", option.Key, option.Value, excp.Message);
+                    }
+                };
 
                 ffmpeg.avcodec_open2(_encoderContext, codec, null).ThrowExceptionIfError();
 
-                logger.LogDebug($"Successfully initialised ffmpeg based image encoder: CodecId:[{codecID}] - {width}:{height} - {fps} Fps");
+                logger.LogDebug("Successfully initialised ffmpeg based image encoder: CodecId:[{id}] - Name:[{name}] - {w}:{h} - {fps} Fps - {fmt}",
+                    codecID, GetNameString(codec->name), width, height, fps, _encoderContext->pix_fmt);
             }
         }
 
@@ -260,6 +351,23 @@ namespace SIPSorceryMedia.FFmpeg
                     {
                         ffmpeg.avcodec_free_context(pCtx);
                     }
+                    _negotiatedPixFmt = null;
+                }
+            }
+        }
+
+        private void ResetDecoder()
+        {
+            // Reset decoder
+            lock (_decoderLock)
+            {
+                if (!_isDisposed && _decoderContext != null && _isDecoderInitialised)
+                {
+                    _isDecoderInitialised = false;
+                    fixed (AVCodecContext** pCtx = &_decoderContext)
+                    {
+                        ffmpeg.avcodec_free_context(pCtx);
+                    }
 
                     if (_frame != null)
                     {
@@ -285,12 +393,15 @@ namespace SIPSorceryMedia.FFmpeg
             if (!_isDecoderInitialised)
             {
                 _isDecoderInitialised = true;
-
                 _codecID = codecID;
-                AVCodec* codec = ffmpeg.avcodec_find_decoder(codecID);
+
+                //var codec = GetCodec(codecID, isEncoder: false); // not ready for decoder
+                var codec = ffmpeg.avcodec_find_decoder(codecID);
+                var decOpts = GetCodecOptions(GetNameString(codec->name));
+
                 if (codec == null)
                 {
-                    throw new ApplicationException($"Codec encoder could not be found for {codecID}.");
+                    throw new ApplicationException($"Decoder codec could not be found for {codecID}.");
                 }
 
                 _decoderContext = ffmpeg.avcodec_alloc_context3(codec);
@@ -304,9 +415,22 @@ namespace SIPSorceryMedia.FFmpeg
                     ffmpeg.av_hwdevice_ctx_create(&_decoderContext->hw_device_ctx, _HwDeviceType, null, null, 0).ThrowExceptionIfError();
                 }
 
+                foreach (var option in decOpts)
+                {
+                    try
+                    {
+                        ffmpeg.av_opt_set(_encoderContext->priv_data, option.Key, option.Value, 0).ThrowExceptionIfError();
+                    }
+                    catch (Exception excp)
+                    {
+                        logger.LogWarning("Failed to set decoder option \"{key}\"=\"{val}\", Skipping this option. {msg}", option.Key, option.Value, excp.Message);
+                    }
+                };
+
                 ffmpeg.avcodec_open2(_decoderContext, codec, null).ThrowExceptionIfError();
 
-                logger.LogDebug($"[InitialiseDecoder] CodecId:[{codecID}");
+                logger.LogDebug("[InitialiseDecoder] Successfully initialised ffmpeg based image decoder: CodecId:[{id}] - Name:[{name}]",
+                    codecID, GetNameString(codec->name));
             }
         }
 
@@ -437,23 +561,24 @@ namespace SIPSorceryMedia.FFmpeg
                         _encoderContext->height = height;
                     }
 
-                    int _linesizeY = width;
-                    int _linesizeU = width / 2;
-                    int _linesizeV = width / 2;
+                    //int _linesizeY = width;
+                    //int _linesizeU = width / 2;
+                    //int _linesizeV = width / 2;
 
-                    int _ySize = _linesizeY * height;
-                    int _uSize = _linesizeU * height / 2;
+                    //int _ySize = _linesizeY * height;
+                    //int _uSize = _linesizeU * height / 2;
 
-                    if (avFrame->format != (int)_encoderContext->pix_fmt) throw new ArgumentException("Invalid pixel format.", nameof(avFrame));
-                    if (avFrame->width != width) throw new ArgumentException("Invalid width.", nameof(avFrame));
-                    if (avFrame->height != height) throw new ArgumentException("Invalid height.", nameof(avFrame));
-                    if (avFrame->linesize[0] < _linesizeY) throw new ArgumentException("Invalid Y linesize.", nameof(avFrame));
-                    if (avFrame->linesize[1] < _linesizeU) throw new ArgumentException("Invalid U linesize.", nameof(avFrame));
-                    if (avFrame->linesize[2] < _linesizeV) throw new ArgumentException("Invalid V linesize.", nameof(avFrame));
+                    //if (avFrame->format != (int)_encoderContext->pix_fmt) throw new ArgumentException("Invalid pixel format.", nameof(avFrame));
+                    //if (avFrame->width != width) throw new ArgumentException("Invalid width.", nameof(avFrame));
+                    //if (avFrame->height != height) throw new ArgumentException("Invalid height.", nameof(avFrame));
+                    //if (avFrame->linesize[0] < _linesizeY) throw new ArgumentException("Invalid Y linesize.", nameof(avFrame));
+                    //if (avFrame->linesize[1] < _linesizeU) throw new ArgumentException("Invalid U linesize.", nameof(avFrame));
+                    //if (avFrame->linesize[2] < _linesizeV) throw new ArgumentException("Invalid V linesize.", nameof(avFrame));
 
                     if (keyFrame || _forceKeyFrame)
                     {
                         avFrame->flags |= ffmpeg.AV_FRAME_FLAG_KEY;
+                        avFrame->pict_type = AVPictureType.AV_PICTURE_TYPE_I;
                         _forceKeyFrame = false;
                     }
 
@@ -619,7 +744,7 @@ namespace SIPSorceryMedia.FFmpeg
                             width, height,
                             (AVPixelFormat)decodedFrame->format,
                             width, height,
-                            AVPixelFormat.AV_PIX_FMT_BGR24);
+                            AVPixelFormat.AV_PIX_FMT_RGB24);
                     }
 
                     //logger.LogDebug($"[DecodeFaster]"
@@ -712,5 +837,52 @@ namespace SIPSorceryMedia.FFmpeg
                 _frameTimer?.Stop();
             }
         }
+
+        // true:
+        //    fmt = match from sourcePixFmts
+        // false:
+        //    found no matching format, fmt = first of the codec supported formats
+        internal bool NegotiatePixelFormat(AVCodecID codecid, int width, int height, int frameRate, AVPixelFormat[]? sourcePixFmts, out AVPixelFormat fmt)
+        {
+            if (_negotiatedPixFmt != null && _codecID == codecid)
+            {
+                fmt = (AVPixelFormat)_negotiatedPixFmt;
+                return true;
+            }
+
+            lock (_encoderLock)
+            {
+                if (_isEncoderInitialised)
+                    ResetEncoder();
+
+                InitialiseEncoder(codecid, width, height, frameRate);
+
+                if (logger.IsEnabled(LogLevel.Trace))
+                    logger.LogTrace("Negotiating pixel format for codec [{name}].", GetNameString(_encoderContext->codec->name));
+
+                var fmts = _encoderContext->codec->pix_fmts;
+                while (*fmts != AVPixelFormat.AV_PIX_FMT_NONE
+                    && sourcePixFmts?.Length > 0 && !sourcePixFmts.Contains(*fmts))
+                {
+                    if (logger.IsEnabled(LogLevel.Trace))
+                        logger.LogTrace("Skipping unsupported pixel format {fmt}.", *fmts);
+                    fmts++;
+                }
+
+                fmt = *fmts;
+                var ok = _encoderContext->codec->pix_fmts[0] != fmt;
+
+                ResetEncoder();
+                
+                _negotiatedPixFmt = fmt;
+
+                if (logger.IsEnabled(LogLevel.Trace))
+                    logger.LogTrace("Negotiated pixel format {fmt}", fmt);
+
+                return ok;
+            }
+        }
+
+        private static string? GetNameString(byte* name) => Marshal.PtrToStringAnsi((IntPtr)name);
     }
 }
